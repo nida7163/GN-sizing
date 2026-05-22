@@ -10,11 +10,11 @@ export default {
       },
       colors: {
         grippy: {
-          cobalt: "#1A3FCC",
-          "cobalt-dark": "#1230A8",
-          "cobalt-light": "#2B52E0",
+          cobalt: "#0D0D0D",
+          "cobalt-dark": "#0D0D0D",
+          "cobalt-light": "#222222",
           black: "#0D0D0D",
-          cream: "#F2EDE4",
+          cream: "#FFFFFF",
         },
       },
       keyframes: {

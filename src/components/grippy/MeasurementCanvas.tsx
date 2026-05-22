@@ -19,7 +19,7 @@ export function MeasurementCanvas({
   imageUrl,
   onMeasure,
   prompt,
-  lineColor = "#1A3FCC",
+  lineColor = "#0D0D0D",
 }: MeasurementCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
@@ -42,10 +42,10 @@ export function MeasurementCanvas({
     const { first, second } = taps;
 
     if (first) {
-      drawMarker(ctx, first, "#1A3FCC");
+      drawMarker(ctx, first, "#0D0D0D");
     }
     if (second) {
-      drawMarker(ctx, second, "#1A3FCC");
+      drawMarker(ctx, second, "#0D0D0D");
     }
     if (first && second) {
       // Line

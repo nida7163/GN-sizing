@@ -190,7 +190,7 @@ function MeasureStep({
         imageUrl={imageUrl}
         prompt={`Tap both edges of your ${label}`}
         onMeasure={(dist) => onMeasure(currentFinger, dist)}
-        lineColor="#1A3FCC"
+        lineColor="#0D0D0D"
       />
     </div>
   );
