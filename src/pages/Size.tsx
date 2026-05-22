@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Hand } from "lucide-react";
+import { ArrowLeft, Hand, Undo2 } from "lucide-react";
 import { GrippyButton } from "@/components/grippy/Button";
 import { ProgressBar } from "@/components/grippy/ProgressBar";
 import { UploadCard } from "@/components/grippy/UploadCard";
@@ -210,10 +210,12 @@ function MeasureStep({
   imageUrl,
   currentFinger,
   onMeasure,
+  onUndo,
 }: {
   imageUrl: string;
   currentFinger: number;
   onMeasure: (fingerIdx: number, distPx: number) => void;
+  onUndo: () => void;
 }) {
   const finger = fingerOrder[currentFinger];
   const label = fingerLabels[finger];
@@ -230,21 +232,32 @@ function MeasureStep({
         </h2>
       </div>
 
-      <div className="flex gap-2 px-2 overflow-x-auto no-scrollbar">
-        {fingerOrder.map((f, i) => (
-          <div
-            key={f}
-            className={`shrink-0 px-3 py-1.5 rounded-full font-mono text-[10px] uppercase tracking-wider transition-colors ${
-              i < currentFinger
-                ? "bg-grippy-cobalt text-grippy-cream"
-                : i === currentFinger
-                ? "bg-grippy-black text-grippy-cream"
-                : "bg-grippy-black/10 text-grippy-black/40"
-            }`}
+      <div className="flex items-center gap-2 px-2">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1">
+          {fingerOrder.map((f, i) => (
+            <div
+              key={f}
+              className={`shrink-0 px-3 py-1.5 rounded-full font-mono text-[10px] uppercase tracking-wider transition-colors ${
+                i < currentFinger
+                  ? "bg-grippy-cobalt text-grippy-cream"
+                  : i === currentFinger
+                  ? "bg-grippy-black text-grippy-cream"
+                  : "bg-grippy-black/10 text-grippy-black/40"
+              }`}
+            >
+              {fingerLabels[f]}
+            </div>
+          ))}
+        </div>
+        {currentFinger > 0 && (
+          <button
+            onClick={onUndo}
+            className="shrink-0 flex items-center gap-1 font-mono text-[10px] text-grippy-black/50 active:text-grippy-black transition-colors border border-grippy-black/15 rounded-full px-2.5 py-1.5"
           >
-            {fingerLabels[f]}
-          </div>
-        ))}
+            <Undo2 size={11} />
+            Redo {fingerLabels[fingerOrder[currentFinger - 1]]}
+          </button>
+        )}
       </div>
 
       <MeasurementCanvas
@@ -269,6 +282,7 @@ export default function Size() {
     setImage,
     setCalibration,
     recordMeasurement,
+    undoMeasurement,
     getMeasurementArray,
   } = useSizing();
 
@@ -362,6 +376,7 @@ export default function Size() {
                 imageUrl={state.imageUrl}
                 currentFinger={state.currentFinger}
                 onMeasure={handleNailMeasured}
+                onUndo={undoMeasurement}
               />
             </PageContainer>
           )}

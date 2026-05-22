@@ -5,11 +5,8 @@ import { Point } from "@/hooks/use-sizing";
 
 interface MeasurementCanvasProps {
   imageUrl: string;
-  /** Called when both points are tapped. Returns pixel distance. */
   onMeasure: (distancePx: number, left: Point, right: Point) => void;
-  /** Label shown above the canvas (e.g. "Tap both edges of your Thumb") */
   prompt: string;
-  /** Overlay color for measurement lines */
   lineColor?: string;
 }
 
@@ -26,9 +23,26 @@ export function MeasurementCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const [taps, setTaps] = useState<TapState>({ first: null, second: null });
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [committed, setCommitted] = useState(false);
 
-  // Draw image + markers + line
+  // Drag state as refs to avoid re-renders during drag
+  const didDrag = useRef(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+  const panAtDragStart = useRef({ x: 0, y: 0 });
+  const tapPos = useRef<{ clientX: number; clientY: number } | null>(null);
+
+  // World space = canvas pixel space (0 to canvas.width/height).
+  // This keeps measurements in the same unit as the original so calibration still works.
+  const clampPan = useCallback((px: number, py: number, z: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: px, y: py };
+    return {
+      x: Math.max(0, Math.min(px, canvas.width * (1 - 1 / z))),
+      y: Math.max(0, Math.min(py, canvas.height * (1 - 1 / z))),
+    };
+  }, []);
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const img = imageRef.current;
@@ -36,53 +50,75 @@ export function MeasurementCanvas({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const z = zoom;
+    const { x: px, y: py } = clampPan(pan.x, pan.y, z);
+
+    // Convert canvas-pixel pan/vis to natural-image-pixel source rect
+    const scaleToNatW = img.naturalWidth / canvas.width;
+    const scaleToNatH = img.naturalHeight / canvas.height;
+    const srcX = px * scaleToNatW;
+    const srcY = py * scaleToNatH;
+    const srcW = (canvas.width / z) * scaleToNatW;
+    const srcH = (canvas.height / z) * scaleToNatH;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, canvas.width, canvas.height);
+
+    // Helpers to convert world (canvas-pixel) coords → screen canvas coords
+    const toScreen = (wx: number, wy: number) => ({
+      sx: (wx - px) * z,
+      sy: (wy - py) * z,
+    });
 
     const { first, second } = taps;
 
     if (first) {
-      drawMarker(ctx, first, "#0D0D0D");
+      const { sx, sy } = toScreen(first.x, first.y);
+      drawMarker(ctx, sx, sy);
     }
     if (second) {
-      drawMarker(ctx, second, "#0D0D0D");
+      const { sx, sy } = toScreen(second.x, second.y);
+      drawMarker(ctx, sx, sy);
     }
     if (first && second) {
-      // Line
+      const s1 = toScreen(first.x, first.y);
+      const s2 = toScreen(second.x, second.y);
+
       ctx.beginPath();
-      ctx.moveTo(first.x, first.y);
-      ctx.lineTo(second.x, second.y);
+      ctx.moveTo(s1.sx, s1.sy);
+      ctx.lineTo(s2.sx, s2.sy);
       ctx.strokeStyle = lineColor;
       ctx.lineWidth = 2.5;
       ctx.setLineDash([6, 4]);
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Distance label
-      const dist = Math.sqrt(Math.pow(second.x - first.x, 2) + Math.pow(second.y - first.y, 2));
-      const mx = (first.x + second.x) / 2;
-      const my = (first.y + second.y) / 2 - 14;
+      const dist = Math.sqrt(
+        Math.pow(second.x - first.x, 2) + Math.pow(second.y - first.y, 2)
+      );
+      const mx = (s1.sx + s2.sx) / 2;
+      const my = (s1.sy + s2.sy) / 2 - 14;
       ctx.font = "bold 13px 'DM Mono', monospace";
       ctx.fillStyle = lineColor;
       ctx.textAlign = "center";
       ctx.fillText(`${Math.round(dist)}px`, mx, my);
     }
-  }, [taps, lineColor]);
+  }, [taps, zoom, pan, lineColor, clampPan]);
 
-  function drawMarker(ctx: CanvasRenderingContext2D, p: Point, color: string) {
+  function drawMarker(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
-    ctx.fillStyle = color;
+    ctx.arc(sx, sy, 10, 0, Math.PI * 2);
+    ctx.fillStyle = "#0D0D0D";
     ctx.globalAlpha = 0.25;
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = color;
+    ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+    ctx.fillStyle = "#0D0D0D";
     ctx.fill();
   }
 
-  // Load image and size canvas
+  // Load image and size canvas to fill container width
   useEffect(() => {
     const img = new Image();
     img.onload = () => {
@@ -91,49 +127,44 @@ export function MeasurementCanvas({
       const container = containerRef.current;
       if (!canvas || !container) return;
       const maxW = container.clientWidth;
-      const ratio = img.naturalHeight / img.naturalWidth;
       canvas.width = maxW;
-      canvas.height = maxW * ratio;
+      canvas.height = maxW * (img.naturalHeight / img.naturalWidth);
       draw();
     };
     img.src = imageUrl;
-  }, [imageUrl, draw]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageUrl]);
 
   useEffect(() => {
     draw();
-  }, [taps, draw]);
+  }, [draw]);
 
-  const getCanvasPoint = (e: React.MouseEvent | React.TouchEvent): Point => {
+  // When zooming out, clamp pan so it stays in bounds
+  useEffect(() => {
+    setPan(p => clampPan(p.x, p.y, zoom));
+  }, [zoom, clampPan]);
+
+  // Convert screen tap position → world (canvas-pixel) coordinates
+  const getWorldPoint = (clientX: number, clientY: number): Point => {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    let clientX: number, clientY: number;
-    if ("touches" in e) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
-    return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
-    };
+    const canvasX = (clientX - rect.left) * (canvas.width / rect.width);
+    const canvasY = (clientY - rect.top) * (canvas.height / rect.height);
+    const { x: px, y: py } = clampPan(pan.x, pan.y, zoom);
+    return { x: px + canvasX / zoom, y: py + canvasY / zoom };
   };
 
-  const handleTap = (e: React.MouseEvent | React.TouchEvent) => {
+  const commitTap = useCallback((clientX: number, clientY: number) => {
     if (committed) return;
-    e.preventDefault();
-    const pt = getCanvasPoint(e);
-
+    const pt = getWorldPoint(clientX, clientY);
     setTaps(prev => {
       if (!prev.first) return { first: pt, second: null };
       if (!prev.second) {
-        const first = prev.first;
+        const { first } = prev;
         const second = pt;
-        const dist = Math.sqrt(Math.pow(second.x - first.x, 2) + Math.pow(second.y - first.y, 2));
-        // Commit after short delay so user sees the line
+        const dist = Math.sqrt(
+          Math.pow(second.x - first.x, 2) + Math.pow(second.y - first.y, 2)
+        );
         setTimeout(() => {
           setCommitted(true);
           onMeasure(dist, first, second);
@@ -142,7 +173,8 @@ export function MeasurementCanvas({
       }
       return { first: pt, second: null };
     });
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [committed, onMeasure, pan, zoom, clampPan]);
 
   const handleUndo = () => {
     setCommitted(false);
@@ -152,9 +184,78 @@ export function MeasurementCanvas({
     });
   };
 
+  // ── Mouse handlers ────────────────────────────────────────────────────────
+  const handleMouseDown = (e: React.MouseEvent) => {
+    didDrag.current = false;
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    panAtDragStart.current = { ...pan };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) didDrag.current = true;
+    if (!didDrag.current || zoom <= 1) return;
+
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const scale = canvas.width / rect.width;
+    setPan(clampPan(
+      panAtDragStart.current.x - (dx * scale) / zoom,
+      panAtDragStart.current.y - (dy * scale) / zoom,
+      zoom,
+    ));
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (!didDrag.current) commitTap(e.clientX, e.clientY);
+    didDrag.current = false;
+  };
+
+  // ── Touch handlers ────────────────────────────────────────────────────────
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault();
+    const t = e.touches[0];
+    didDrag.current = false;
+    dragStart.current = { x: t.clientX, y: t.clientY };
+    panAtDragStart.current = { ...pan };
+    tapPos.current = { clientX: t.clientX, clientY: t.clientY };
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    const dx = t.clientX - dragStart.current.x;
+    const dy = t.clientY - dragStart.current.y;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) didDrag.current = true;
+    if (!didDrag.current || zoom <= 1) return;
+
+    e.preventDefault();
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const scale = canvas.width / rect.width;
+    setPan(clampPan(
+      panAtDragStart.current.x - (dx * scale) / zoom,
+      panAtDragStart.current.y - (dy * scale) / zoom,
+      zoom,
+    ));
+  };
+
+  const handleTouchEnd = () => {
+    if (!didDrag.current && tapPos.current) {
+      commitTap(tapPos.current.clientX, tapPos.current.clientY);
+    }
+    didDrag.current = false;
+    tapPos.current = null;
+  };
+
+  const hintText = !taps.first
+    ? "Zoom in on the nail, then tap the left edge"
+    : !taps.second
+    ? "Now tap the right edge"
+    : "Measuring…";
+
   return (
     <div className="w-full flex flex-col gap-3">
-      {/* Prompt */}
       <AnimatePresence mode="wait">
         <motion.p
           key={prompt}
@@ -167,26 +268,26 @@ export function MeasurementCanvas({
         </motion.p>
       </AnimatePresence>
 
-      {/* Tap hint */}
-      <p className="font-mono text-[11px] text-grippy-black/40 text-center">
-        {!taps.first ? "Tap the left edge" : !taps.second ? "Now tap the right edge" : "Measuring…"}
-      </p>
+      <p className="font-mono text-[11px] text-grippy-black/40 text-center">{hintText}</p>
 
-      {/* Canvas container */}
       <div
         ref={containerRef}
         className="relative w-full rounded-2xl overflow-hidden bg-grippy-black shadow-xl"
-        style={{ transform: `scale(${zoom})`, transformOrigin: "top center", transition: "transform 0.2s" }}
+        style={{ cursor: zoom > 1 ? "grab" : "crosshair" }}
       >
         <canvas
           ref={canvasRef}
-          className="w-full touch-none"
-          onClick={handleTap}
-          onTouchStart={handleTap}
+          className="w-full touch-none select-none"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={() => { didDrag.current = false; }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
         />
       </div>
 
-      {/* Controls */}
       <div className="flex items-center justify-between px-1">
         <button
           onClick={handleUndo}
@@ -197,14 +298,19 @@ export function MeasurementCanvas({
         </button>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => setZoom(z => Math.max(1, z - 0.25))}
-            className="text-grippy-black/50 active:text-grippy-black transition-colors"
+            onClick={() => setZoom(z => Math.max(1, z - 0.5))}
+            disabled={zoom <= 1}
+            className="text-grippy-black/50 active:text-grippy-black transition-colors disabled:opacity-30"
           >
             <ZoomOut size={18} />
           </button>
+          <span className="font-mono text-[10px] text-grippy-black/40 tabular-nums w-8 text-center">
+            {zoom.toFixed(1)}×
+          </span>
           <button
-            onClick={() => setZoom(z => Math.min(3, z + 0.25))}
-            className="text-grippy-black/50 active:text-grippy-black transition-colors"
+            onClick={() => setZoom(z => Math.min(4, z + 0.5))}
+            disabled={zoom >= 4}
+            className="text-grippy-black/50 active:text-grippy-black transition-colors disabled:opacity-30"
           >
             <ZoomIn size={18} />
           </button>
