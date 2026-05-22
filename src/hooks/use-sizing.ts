@@ -10,6 +10,7 @@ export interface CalibrationData {
 }
 
 export type MeasurementMap = Partial<Record<FingerName, number>>;
+export type MeasurementPointsMap = Partial<Record<FingerName, { left: Point; right: Point }>>;
 
 export interface SizingState {
   step: number;
@@ -19,6 +20,7 @@ export interface SizingState {
   imageUrl: string | null;
   calibration: CalibrationData | null;
   measurements: MeasurementMap;
+  measurementPoints: MeasurementPointsMap;
   currentFinger: number;
 }
 
@@ -30,6 +32,7 @@ const initialState: SizingState = {
   imageUrl: null,
   calibration: null,
   measurements: {},
+  measurementPoints: {},
   currentFinger: 0,
 };
 
@@ -59,16 +62,23 @@ export function useSizing() {
     setState(s => ({ ...s, calibration: { left, right, pixelsPerMm }, step: 5 }));
   }, []);
 
-  const recordMeasurement = useCallback((fingerIndex: number, widthPx: number) => {
+  const recordMeasurement = useCallback((
+    fingerIndex: number,
+    widthPx: number,
+    left: Point,
+    right: Point,
+  ) => {
     const finger = fingerOrder[fingerIndex];
     setState(s => {
       const pixelsPerMm = s.calibration?.pixelsPerMm ?? 5;
       const widthMm = pixelsToMm(widthPx, pixelsPerMm);
       const next: MeasurementMap = { ...s.measurements, [finger]: widthMm };
+      const nextPoints: MeasurementPointsMap = { ...s.measurementPoints, [finger]: { left, right } };
       const allDone = fingerOrder.every(f => next[f] !== undefined);
       return {
         ...s,
         measurements: next,
+        measurementPoints: nextPoints,
         currentFinger: allDone ? fingerIndex : fingerIndex + 1,
         step: allDone ? 6 : 5,
       };
@@ -80,8 +90,10 @@ export function useSizing() {
       const idx = Math.max(0, s.currentFinger - 1);
       const finger = fingerOrder[idx];
       const next = { ...s.measurements };
+      const nextPoints = { ...s.measurementPoints };
       delete next[finger];
-      return { ...s, measurements: next, currentFinger: idx };
+      delete nextPoints[finger];
+      return { ...s, measurements: next, measurementPoints: nextPoints, currentFinger: idx };
     });
   }, []);
 
