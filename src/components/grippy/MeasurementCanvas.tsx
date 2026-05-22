@@ -22,25 +22,68 @@ export function MeasurementCanvas({
   const imageRef = useRef<HTMLImageElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [taps, setTaps] = useState<TapState>({ first: null, second: null });
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
   const [committed, setCommitted] = useState(false);
+
+  // Single-touch drag state (refs to avoid re-renders on every move)
+  const didDrag = useRef(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+  const panAtDragStart = useRef({ x: 0, y: 0 });
+  const tapPos = useRef<{ clientX: number; clientY: number } | null>(null);
+
+  // Pinch state
+  const pinchStartDist = useRef<number | null>(null);
+  const pinchStartZoom = useRef(1);
+  const pinchWorldMid = useRef({ x: 0, y: 0 });
+
+  // World space = canvas-pixel space so stored distances stay calibration-compatible.
+  const clampPan = useCallback((px: number, py: number, z: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: px, y: py };
+    return {
+      x: Math.max(0, Math.min(px, canvas.width  * (1 - 1 / z))),
+      y: Math.max(0, Math.min(py, canvas.height * (1 - 1 / z))),
+    };
+  }, []);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    const img = imageRef.current;
+    const img   = imageRef.current;
     if (!canvas || !img) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const z = zoom;
+    const { x: px, y: py } = clampPan(pan.x, pan.y, z);
+
+    // Map canvas-pixel viewport → natural image pixels for drawImage source rect
+    const sw = img.naturalWidth  / canvas.width;
+    const sh = img.naturalHeight / canvas.height;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(
+      img,
+      px * sw, py * sh,
+      (canvas.width  / z) * sw,
+      (canvas.height / z) * sh,
+      0, 0, canvas.width, canvas.height,
+    );
+
+    // World → screen canvas coords
+    const toScreen = (wx: number, wy: number) => ({
+      sx: (wx - px) * z,
+      sy: (wy - py) * z,
+    });
 
     const { first, second } = taps;
-    if (first) drawMarker(ctx, first.x, first.y);
-    if (second) drawMarker(ctx, second.x, second.y);
+    if (first)  { const { sx, sy } = toScreen(first.x,  first.y);  drawMarker(ctx, sx, sy); }
+    if (second) { const { sx, sy } = toScreen(second.x, second.y); drawMarker(ctx, sx, sy); }
     if (first && second) {
+      const s1 = toScreen(first.x,  first.y);
+      const s2 = toScreen(second.x, second.y);
       ctx.beginPath();
-      ctx.moveTo(first.x, first.y);
-      ctx.lineTo(second.x, second.y);
+      ctx.moveTo(s1.sx, s1.sy);
+      ctx.lineTo(s2.sx, s2.sy);
       ctx.strokeStyle = lineColor;
       ctx.lineWidth = 2.5;
       ctx.setLineDash([6, 4]);
@@ -52,11 +95,11 @@ export function MeasurementCanvas({
       ctx.textAlign = "center";
       ctx.fillText(
         `${Math.round(dist)}px`,
-        (first.x + second.x) / 2,
-        (first.y + second.y) / 2 - 14,
+        (s1.sx + s2.sx) / 2,
+        (s1.sy + s2.sy) / 2 - 14,
       );
     }
-  }, [taps, lineColor]);
+  }, [taps, zoom, pan, lineColor, clampPan]);
 
   function drawMarker(ctx: CanvasRenderingContext2D, sx: number, sy: number) {
     ctx.beginPath();
@@ -71,66 +114,174 @@ export function MeasurementCanvas({
     ctx.fill();
   }
 
+  // Load image → size canvas → first draw
   useEffect(() => {
     const img = new Image();
     img.onload = () => {
       imageRef.current = img;
-      const canvas = canvasRef.current;
+      const canvas    = canvasRef.current;
       const container = containerRef.current;
       if (!canvas || !container) return;
       const maxW = container.clientWidth;
-      canvas.width = maxW;
+      canvas.width  = maxW;
       canvas.height = maxW * (img.naturalHeight / img.naturalWidth);
       draw();
     };
     img.src = imageUrl;
-  }, [imageUrl, draw]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageUrl]);
 
   useEffect(() => { draw(); }, [draw]);
+  useEffect(() => { setPan(p => clampPan(p.x, p.y, zoom)); }, [zoom, clampPan]);
 
-  const getCanvasPoint = (e: React.MouseEvent | React.TouchEvent): Point => {
+  // Convert a client position → world (canvas-pixel) coords
+  const toWorld = useCallback((clientX: number, clientY: number): Point => {
     const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    let clientX: number, clientY: number;
-    if ("touches" in e) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
+    const rect   = canvas.getBoundingClientRect();
+    const scale  = canvas.width / rect.width;
+    const { x: px, y: py } = clampPan(pan.x, pan.y, zoom);
     return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY,
+      x: px + (clientX - rect.left) * scale / zoom,
+      y: py + (clientY - rect.top)  * scale / zoom,
     };
-  };
+  }, [pan, zoom, clampPan]);
 
-  const handleTap = (e: React.MouseEvent | React.TouchEvent) => {
+  const commitTap = useCallback((clientX: number, clientY: number) => {
     if (committed) return;
-    e.preventDefault();
-    const pt = getCanvasPoint(e);
+    const pt = toWorld(clientX, clientY);
     setTaps(prev => {
       if (!prev.first) return { first: pt, second: null };
       if (!prev.second) {
         const { first } = prev;
         const second = pt;
         const dist = Math.hypot(second.x - first.x, second.y - first.y);
-        setTimeout(() => {
-          setCommitted(true);
-          onMeasure(dist, first, second);
-        }, 600);
+        setTimeout(() => { setCommitted(true); onMeasure(dist, first, second); }, 600);
         return { first, second };
       }
       return { first: pt, second: null };
     });
-  };
+  }, [committed, onMeasure, toWorld]);
 
   const handleUndo = () => {
     setCommitted(false);
     setTaps(prev => prev.second ? { ...prev, second: null } : { first: null, second: null });
   };
+
+  // ── Shared pan delta helper ───────────────────────────────────────────────
+  const applyPanDelta = (dx: number, dy: number, z = zoom) => {
+    const canvas = canvasRef.current!;
+    const scale  = canvas.width / canvas.getBoundingClientRect().width;
+    setPan(clampPan(
+      panAtDragStart.current.x - dx * scale / z,
+      panAtDragStart.current.y - dy * scale / z,
+      z,
+    ));
+  };
+
+  // ── Mouse handlers ────────────────────────────────────────────────────────
+  const handleMouseDown = (e: React.MouseEvent) => {
+    didDrag.current = false;
+    dragStart.current       = { x: e.clientX, y: e.clientY };
+    panAtDragStart.current  = { ...pan };
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) didDrag.current = true;
+    if (!didDrag.current || zoom <= 1) return;
+    applyPanDelta(dx, dy);
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (!didDrag.current) commitTap(e.clientX, e.clientY);
+    didDrag.current = false;
+  };
+
+  // ── Touch handlers ────────────────────────────────────────────────────────
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault();
+
+    if (e.touches.length === 2) {
+      // Begin pinch
+      const t1 = e.touches[0], t2 = e.touches[1];
+      pinchStartDist.current = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      pinchStartZoom.current = zoom;
+      pinchWorldMid.current  = toWorld(
+        (t1.clientX + t2.clientX) / 2,
+        (t1.clientY + t2.clientY) / 2,
+      );
+      didDrag.current = true; // suppress tap on end
+      tapPos.current  = null;
+    } else {
+      // Single touch — potential tap or pan
+      const t = e.touches[0];
+      pinchStartDist.current = null;
+      didDrag.current        = false;
+      dragStart.current      = { x: t.clientX, y: t.clientY };
+      panAtDragStart.current = { ...pan };
+      tapPos.current         = { clientX: t.clientX, clientY: t.clientY };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchStartDist.current !== null) {
+      e.preventDefault();
+      const t1 = e.touches[0], t2 = e.touches[1];
+      const dist    = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const newZoom = Math.max(1, Math.min(4, pinchStartZoom.current * dist / pinchStartDist.current));
+
+      // Keep the pinch midpoint anchored in world space
+      const canvas = canvasRef.current!;
+      const rect   = canvas.getBoundingClientRect();
+      const scale  = canvas.width / rect.width;
+      const midX   = (t1.clientX + t2.clientX) / 2;
+      const midY   = (t1.clientY + t2.clientY) / 2;
+      const cMx    = (midX - rect.left) * scale;
+      const cMy    = (midY - rect.top)  * scale;
+
+      const newPan = clampPan(
+        pinchWorldMid.current.x - cMx / newZoom,
+        pinchWorldMid.current.y - cMy / newZoom,
+        newZoom,
+      );
+      setZoom(newZoom);
+      setPan(newPan);
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      const t  = e.touches[0];
+      const dx = t.clientX - dragStart.current.x;
+      const dy = t.clientY - dragStart.current.y;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) didDrag.current = true;
+      if (!didDrag.current || zoom <= 1) return;
+      e.preventDefault();
+      applyPanDelta(dx, dy);
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    // Pinch → single finger: enter pan mode for the remaining finger
+    if (e.touches.length === 1 && pinchStartDist.current !== null) {
+      pinchStartDist.current = null;
+      const t = e.touches[0];
+      dragStart.current      = { x: t.clientX, y: t.clientY };
+      panAtDragStart.current = { ...pan };
+      didDrag.current        = true;
+      tapPos.current         = null;
+      return;
+    }
+
+    pinchStartDist.current = null;
+    if (!didDrag.current && tapPos.current) {
+      commitTap(tapPos.current.clientX, tapPos.current.clientY);
+    }
+    didDrag.current = false;
+    tapPos.current  = null;
+  };
+
+  const isZoomed = zoom > 1;
 
   const hintText = !taps.first
     ? "Tap the left edge"
@@ -154,19 +305,34 @@ export function MeasurementCanvas({
 
       <p className="font-mono text-[11px] text-grippy-black/40 text-center">{hintText}</p>
 
+      {/* Canvas */}
       <div
         ref={containerRef}
         className="relative w-full rounded-2xl overflow-hidden bg-grippy-black shadow-xl"
+        style={{ cursor: isZoomed ? "grab" : "crosshair" }}
       >
         <canvas
           ref={canvasRef}
-          className="w-full touch-none"
-          onClick={handleTap}
-          onTouchStart={handleTap}
+          className="w-full touch-none select-none"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={() => { didDrag.current = false; }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
         />
+
+        {/* Zoom level badge */}
+        {isZoomed && (
+          <div className="absolute top-2.5 right-2.5 bg-grippy-black/60 backdrop-blur-sm text-grippy-cream font-mono text-[11px] tabular-nums px-2 py-1 rounded-full pointer-events-none">
+            {zoom.toFixed(1)}×
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center px-1">
+      {/* Controls */}
+      <div className="flex items-center justify-between px-1">
         <button
           onClick={handleUndo}
           className="flex items-center gap-1.5 text-grippy-black/50 font-mono text-xs active:text-grippy-black transition-colors"
@@ -174,6 +340,10 @@ export function MeasurementCanvas({
           <Undo2 size={14} />
           Undo
         </button>
+
+        <p className="font-mono text-[10px] text-grippy-black/30">
+          {isZoomed ? "drag to pan" : "pinch to zoom"}
+        </p>
       </div>
     </div>
   );
