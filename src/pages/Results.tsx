@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, BookmarkCheck, ShoppingBag, Share2 } from "lucide-react";
+import { ArrowLeft, BookmarkCheck, ShoppingBag, Share2, History } from "lucide-react";
 import { ResultCard } from "@/components/grippy/ResultCard";
 import { GrippyButton } from "@/components/grippy/Button";
-import { SizeKey } from "@/lib/sizeChart";
+import { SizeKey, NailShape, shapeLabels } from "@/lib/sizeChart";
 import { MeasurementMap } from "@/hooks/use-sizing";
 import { saveSizingSession } from "@/lib/grippy-supabase";
 
@@ -13,6 +13,7 @@ interface GrippyResult {
   confidence: number;
   measurements: MeasurementMap;
   hand: "left" | "right";
+  shape: NailShape;
 }
 
 export default function Results() {
@@ -36,12 +37,13 @@ export default function Results() {
   const handleSave = async () => {
     if (!result || saved) return;
     setSaved(true);
-    await saveSizingSession(result.hand, result.size, result.confidence, result.measurements);
+    await saveSizingSession(result.hand, result.size, result.confidence, result.measurements, result.shape);
   };
 
   const handleShare = async () => {
     if (!result) return;
-    const text = `My Grippy nail size is ${result.size}! Find yours at grippynails.com`;
+    const shapeName = shapeLabels[result.shape] ?? result.shape;
+    const text = `My Grippy nail size is ${result.size} in ${shapeName}! Find yours at grippynails.com`;
     if (navigator.share) {
       await navigator.share({ text });
     } else {
@@ -50,6 +52,8 @@ export default function Results() {
   };
 
   if (!result) return null;
+
+  const shapeName = shapeLabels[result.shape] ?? result.shape;
 
   return (
     <div className="min-h-screen grippy-surface flex flex-col">
@@ -74,7 +78,7 @@ export default function Results() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 flex flex-col gap-6 px-5 pt-4 pb-10">
+      <div className="flex-1 flex flex-col gap-5 px-5 pt-4 pb-10">
         {/* Heading */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
@@ -83,11 +87,11 @@ export default function Results() {
           className="space-y-1"
         >
           <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
-            {result.hand} hand · Your results
+            {shapeName} · {result.hand} hand · Your results
           </p>
           <h1 className="font-unbounded text-2xl font-bold text-grippy-black">
             You're a size<br />
-            <span className="text-grippy-cobalt">{result.size}.</span>
+            <span className="text-grippy-black">{result.size}.</span>
           </h1>
         </motion.div>
 
@@ -102,12 +106,33 @@ export default function Results() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
+          transition={{ delay: 0.4 }}
           className="bg-grippy-black/5 rounded-2xl px-5 py-4"
         >
           <p className="font-mono text-xs text-grippy-black/60 leading-relaxed">
             Sizes are based on nail width measurements. If you're between sizes, we recommend sizing up for a comfortable fit. All Grippy sets include a nail file for customisation.
           </p>
+        </motion.div>
+
+        {/* Sizing history — placeholder */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="border border-grippy-black/10 rounded-2xl px-5 py-4 flex items-center justify-between gap-4"
+        >
+          <div className="flex items-center gap-3">
+            <History size={18} className="text-grippy-black/30 shrink-0" />
+            <div>
+              <p className="font-unbounded text-xs font-semibold text-grippy-black">Sizing History</p>
+              <p className="font-mono text-[10px] text-grippy-black/40 mt-0.5">
+                Reorder in seconds from saved measurements
+              </p>
+            </div>
+          </div>
+          <span className="font-mono text-[9px] uppercase tracking-widest bg-grippy-black/5 text-grippy-black/40 px-2.5 py-1 rounded-full whitespace-nowrap shrink-0">
+            Coming soon
+          </span>
         </motion.div>
 
         {/* CTAs */}
@@ -123,26 +148,16 @@ export default function Results() {
             variant={saved ? "outline" : "primary"}
             onClick={handleSave}
           >
-            {saved ? (
-              <>
-                <BookmarkCheck size={16} />
-                Size Saved
-              </>
-            ) : (
-              <>
-                <BookmarkCheck size={16} />
-                Save My Size
-              </>
-            )}
+            <BookmarkCheck size={16} />
+            {saved ? "Size Saved" : "Save My Size"}
           </GrippyButton>
 
           <GrippyButton fullWidth size="lg" variant="ghost">
             <ShoppingBag size={16} />
-            Shop Sets
+            Shop {shapeName} Sets
           </GrippyButton>
         </motion.div>
 
-        {/* Retake */}
         <button
           onClick={() => navigate("/size")}
           className="text-center font-mono text-xs text-grippy-black/40 underline underline-offset-4 mt-2"

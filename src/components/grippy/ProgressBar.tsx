@@ -7,7 +7,7 @@ interface ProgressBarProps {
   className?: string;
 }
 
-const STEP_LABELS = ["Start", "Hand", "Photo", "Calibrate", "Measure", "Results"];
+const STEP_LABELS = ["Start", "Hand", "Shape", "Photo", "Calibrate", "Measure", "Done"];
 
 export function ProgressBar({ current, total, className }: ProgressBarProps) {
   const percent = Math.min(100, Math.round((current / (total - 1)) * 100));

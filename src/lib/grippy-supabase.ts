@@ -1,12 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
-import { SizeKey } from "./sizeChart";
+import { SizeKey, NailShape } from "./sizeChart";
 import { MeasurementMap } from "@/hooks/use-sizing";
 
 export async function saveSizingSession(
   hand: "left" | "right",
   size: SizeKey,
   confidence: number,
-  measurements: MeasurementMap
+  measurements: MeasurementMap,
+  shape?: NailShape  // TODO: add shape column to sizing_sessions migration
 ): Promise<{ sessionId: string | null; error: string | null }> {
   // Create anonymous profile
   const { data: profile, error: profileErr } = await supabase
