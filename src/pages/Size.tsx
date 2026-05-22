@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Hand, Undo2 } from "lucide-react";
 import { GrippyButton } from "@/components/grippy/Button";
@@ -8,6 +8,7 @@ import { UploadCard } from "@/components/grippy/UploadCard";
 import { MeasurementCanvas } from "@/components/grippy/MeasurementCanvas";
 import { PageContainer } from "@/components/grippy/PageContainer";
 import { useSizing } from "@/hooks/use-sizing";
+import type { Point, MeasurementPointsMap } from "@/hooks/use-sizing";
 import { fingerOrder, fingerLabels, getClosestSize, NailShape } from "@/lib/sizeChart";
 
 const TOTAL_STEPS = 7;
@@ -31,6 +32,65 @@ function NailShapeIcon({ shape }: { shape: NailShape }) {
         stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+// ── Frozen canvas: draws the image with two measurement points overlaid ──────
+function FrozenCanvas({ imageUrl, left, right }: { imageUrl: string; left: Point; right: Point }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = canvasRef.current;
+      const container = containerRef.current;
+      if (!canvas || !container) return;
+      const maxW = container.clientWidth;
+      canvas.width = maxW;
+      canvas.height = maxW * (img.naturalHeight / img.naturalWidth);
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      const drawMarker = (p: Point) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+        ctx.fillStyle = "#0D0D0D";
+        ctx.globalAlpha = 0.25;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = "#0D0D0D";
+        ctx.fill();
+      };
+
+      drawMarker(left);
+      drawMarker(right);
+
+      ctx.beginPath();
+      ctx.moveTo(left.x, left.y);
+      ctx.lineTo(right.x, right.y);
+      ctx.strokeStyle = "#0D0D0D";
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const mx = (left.x + right.x) / 2;
+      const my = (left.y + right.y) / 2 - 14;
+      ctx.font = "bold 13px 'DM Mono', monospace";
+      ctx.fillStyle = "#0D0D0D";
+      ctx.textAlign = "center";
+      ctx.fillText(`${Math.round(Math.hypot(right.x - left.x, right.y - left.y))}px`, mx, my);
+    };
+    img.src = imageUrl;
+  }, [imageUrl, left, right]);
+
+  return (
+    <div ref={containerRef} className="w-full rounded-xl overflow-hidden bg-grippy-black shadow-md">
+      <canvas ref={canvasRef} className="w-full" />
+    </div>
   );
 }
 
@@ -149,7 +209,6 @@ function PhotoStep({
         </h2>
       </div>
 
-      {/* Guided tips */}
       <div className="bg-grippy-black/5 rounded-2xl px-4 py-3 space-y-2">
         <p className="font-unbounded text-xs font-semibold text-grippy-black">For best results:</p>
         <ul className="space-y-1.5">
@@ -183,7 +242,7 @@ function CalibrationStep({
   onDone,
 }: {
   imageUrl: string;
-  onDone: (distPx: number, l: { x: number; y: number }, r: { x: number; y: number }) => void;
+  onDone: (distPx: number, l: Point, r: Point) => void;
 }) {
   return (
     <div className="flex flex-col gap-5 px-4 pt-4">
@@ -209,17 +268,31 @@ function CalibrationStep({
 function MeasureStep({
   imageUrl,
   currentFinger,
+  measurementPoints,
   onMeasure,
   onUndo,
 }: {
   imageUrl: string;
   currentFinger: number;
-  onMeasure: (fingerIdx: number, distPx: number) => void;
+  measurementPoints: MeasurementPointsMap;
+  onMeasure: (fingerIdx: number, distPx: number, left: Point, right: Point) => void;
   onUndo: () => void;
 }) {
+  const [reviewIdx, setReviewIdx] = useState<number | null>(null);
+
   const finger = fingerOrder[currentFinger];
   const label = fingerLabels[finger];
   const remaining = fingerOrder.length - currentFinger;
+
+  const handleChipClick = (i: number) => {
+    if (i >= currentFinger) return;
+    setReviewIdx(prev => (prev === i ? null : i));
+  };
+
+  // Close review when moving to the next finger
+  useEffect(() => { setReviewIdx(null); }, [currentFinger]);
+
+  const reviewPts = reviewIdx !== null ? measurementPoints[fingerOrder[reviewIdx]] : undefined;
 
   return (
     <div className="flex flex-col gap-5 px-4 pt-4">
@@ -232,22 +305,33 @@ function MeasureStep({
         </h2>
       </div>
 
+      {/* Finger chips + undo */}
       <div className="flex items-center gap-2 px-2">
         <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1">
-          {fingerOrder.map((f, i) => (
-            <div
-              key={f}
-              className={`shrink-0 px-3 py-1.5 rounded-full font-mono text-[10px] uppercase tracking-wider transition-colors ${
-                i < currentFinger
-                  ? "bg-grippy-cobalt text-grippy-cream"
-                  : i === currentFinger
-                  ? "bg-grippy-black text-grippy-cream"
-                  : "bg-grippy-black/10 text-grippy-black/40"
-              }`}
-            >
-              {fingerLabels[f]}
-            </div>
-          ))}
+          {fingerOrder.map((f, i) => {
+            const done = i < currentFinger;
+            const active = i === currentFinger;
+            const reviewing = reviewIdx === i;
+            return (
+              <button
+                key={f}
+                onClick={() => handleChipClick(i)}
+                disabled={!done}
+                className={[
+                  "shrink-0 px-3 py-1.5 rounded-full font-mono text-[10px] uppercase tracking-wider transition-all",
+                  done && reviewing
+                    ? "bg-grippy-cobalt text-grippy-cream ring-2 ring-grippy-cobalt ring-offset-1"
+                    : done
+                    ? "bg-grippy-cobalt text-grippy-cream"
+                    : active
+                    ? "bg-grippy-black text-grippy-cream"
+                    : "bg-grippy-black/10 text-grippy-black/40",
+                ].join(" ")}
+              >
+                {fingerLabels[f]}
+              </button>
+            );
+          })}
         </div>
         {currentFinger > 0 && (
           <button
@@ -260,11 +344,32 @@ function MeasureStep({
         )}
       </div>
 
+      {/* Measurement review panel */}
+      <AnimatePresence>
+        {reviewIdx !== null && reviewPts && (
+          <motion.div
+            key={`review-${reviewIdx}`}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden px-2"
+          >
+            <div className="flex flex-col gap-2 pb-1">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
+                {fingerLabels[fingerOrder[reviewIdx]]} — tap chip again to close
+              </p>
+              <FrozenCanvas imageUrl={imageUrl} left={reviewPts.left} right={reviewPts.right} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Active measurement canvas */}
       <MeasurementCanvas
         key={currentFinger}
         imageUrl={imageUrl}
         prompt={`Tap both edges of your ${label}`}
-        onMeasure={(dist) => onMeasure(currentFinger, dist)}
+        onMeasure={(dist, l, r) => onMeasure(currentFinger, dist, l, r)}
         lineColor="#0D0D0D"
       />
     </div>
@@ -291,16 +396,12 @@ export default function Size() {
     setStep(state.step - 1);
   };
 
-  const handleCalibrationDone = (
-    _distPx: number,
-    l: { x: number; y: number },
-    r: { x: number; y: number }
-  ) => {
+  const handleCalibrationDone = (_distPx: number, l: Point, r: Point) => {
     setCalibration(l, r);
   };
 
-  const handleNailMeasured = (fingerIdx: number, distPx: number) => {
-    recordMeasurement(fingerIdx, distPx);
+  const handleNailMeasured = (fingerIdx: number, distPx: number, left: Point, right: Point) => {
+    recordMeasurement(fingerIdx, distPx, left, right);
   };
 
   useEffect(() => {
@@ -375,6 +476,7 @@ export default function Size() {
               <MeasureStep
                 imageUrl={state.imageUrl}
                 currentFinger={state.currentFinger}
+                measurementPoints={state.measurementPoints}
                 onMeasure={handleNailMeasured}
                 onUndo={undoMeasurement}
               />
