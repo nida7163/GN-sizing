@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { SizeKey, fingerOrder } from "./sizeChart";
+import { SizeKey } from "./sizeChart";
 import { MeasurementMap } from "@/hooks/use-sizing";
 
 export async function saveSizingSession(

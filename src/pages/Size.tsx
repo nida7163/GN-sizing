@@ -147,12 +147,10 @@ function MeasureStep({
   imageUrl,
   currentFinger,
   onMeasure,
-  onUndo,
 }: {
   imageUrl: string;
   currentFinger: number;
   onMeasure: (fingerIdx: number, distPx: number) => void;
-  onUndo: () => void;
 }) {
   const finger = fingerOrder[currentFinger];
   const label = fingerLabels[finger];
@@ -208,9 +206,7 @@ export default function Size() {
     setImage,
     setCalibration,
     recordMeasurement,
-    undoMeasurement,
     getMeasurementArray,
-    reset,
   } = useSizing();
 
   const goBack = () => {
@@ -219,7 +215,7 @@ export default function Size() {
   };
 
   const handleCalibrationDone = (
-    distPx: number,
+    _distPx: number,
     l: { x: number; y: number },
     r: { x: number; y: number }
   ) => {
@@ -304,7 +300,6 @@ export default function Size() {
                 imageUrl={state.imageUrl}
                 currentFinger={state.currentFinger}
                 onMeasure={handleNailMeasured}
-                onUndo={undoMeasurement}
               />
             </PageContainer>
           )}
