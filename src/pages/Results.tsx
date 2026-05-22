@@ -26,6 +26,11 @@ export default function Results() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [history, setHistory] = useState<HistorySession[]>([]);
 
+  // Detect if we landed here from a magic link (URL has ?code= from Supabase PKCE exchange)
+  const [isAuthCallback] = useState(() =>
+    new URLSearchParams(window.location.search).has("code")
+  );
+
   // Load result — check sessionStorage first, then localStorage (for post-magic-link redirect)
   useEffect(() => {
     const raw = sessionStorage.getItem("grippy_result") || localStorage.getItem("grippy_pending_save");
@@ -35,10 +40,20 @@ export default function Results() {
       } catch {
         navigate("/size");
       }
-    } else {
+    } else if (!isAuthCallback) {
+      // Only redirect immediately if this isn't a magic link callback.
+      // On auth callback, we wait for auth to resolve — the user may need
+      // to be logged in before we know what to show.
       navigate("/size");
     }
-  }, [navigate]);
+  }, [navigate, isAuthCallback]);
+
+  // On magic link callback: once auth resolves and there's still no result data, give up
+  useEffect(() => {
+    if (isAuthCallback && !result && !authLoading && !user) {
+      navigate("/size");
+    }
+  }, [isAuthCallback, result, authLoading, user, navigate]);
 
   // After magic link login: auto-save the pending result
   useEffect(() => {
@@ -89,7 +104,16 @@ export default function Results() {
     }
   };
 
-  if (!result) return null;
+  if (!result) {
+    if (isAuthCallback && authLoading) {
+      return (
+        <div className="min-h-screen grippy-surface flex items-center justify-center">
+          <span className="font-unbounded text-xs text-grippy-black/40 tracking-widest">Signing you in…</span>
+        </div>
+      );
+    }
+    return null;
+  }
 
   const shapeName = shapeLabels[result.shape] ?? result.shape;
 
