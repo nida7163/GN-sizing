@@ -7,12 +7,12 @@ export async function saveSizingSession(
   size: SizeKey,
   confidence: number,
   measurements: MeasurementMap,
-  shape?: NailShape  // TODO: add shape column to sizing_sessions migration
+  shape?: NailShape,
+  userId?: string
 ): Promise<{ sessionId: string | null; error: string | null }> {
-  // Create anonymous profile
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
-    .insert({})
+    .insert({ user_id: userId ?? null })
     .select("id")
     .single();
 
@@ -20,10 +20,16 @@ export async function saveSizingSession(
     return { sessionId: null, error: profileErr?.message ?? "Failed to create profile" };
   }
 
-  // Create session
   const { data: session, error: sessionErr } = await supabase
     .from("sizing_sessions")
-    .insert({ profile_id: profile.id, hand, recommended_size: size, confidence })
+    .insert({
+      profile_id: profile.id,
+      hand,
+      recommended_size: size,
+      confidence,
+      shape: shape ?? null,
+      user_id: userId ?? null,
+    })
     .select("id")
     .single();
 
@@ -31,7 +37,6 @@ export async function saveSizingSession(
     return { sessionId: null, error: sessionErr?.message ?? "Failed to save session" };
   }
 
-  // Save measurements
   const { error: measErr } = await supabase.from("measurements").insert({
     session_id: session.id,
     thumb: measurements.thumb ?? null,
@@ -46,6 +51,24 @@ export async function saveSizingSession(
   }
 
   return { sessionId: session.id, error: null };
+}
+
+export interface HistorySession {
+  id: string;
+  created_at: string;
+  recommended_size: string;
+  shape: string | null;
+  hand: string;
+}
+
+export async function fetchHistory(userId: string): Promise<HistorySession[]> {
+  const { data } = await supabase
+    .from("sizing_sessions")
+    .select("id, created_at, recommended_size, shape, hand")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(10);
+  return data ?? [];
 }
 
 export async function fetchSession(sessionId: string) {
