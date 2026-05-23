@@ -13,6 +13,7 @@ interface GrippyResult {
   confidence: number;
   sizedUp?: boolean;
   originalSize?: SizeKey;
+  isGiftMode?: boolean;
   measurements: MeasurementMap;
   hand: "left" | "right";
   shape: NailShape;
@@ -49,7 +50,9 @@ export default function Results() {
   const handleShare = async () => {
     if (!result) return;
     const shapeName = shapeLabels[result.shape] ?? result.shape;
-    const text = `My Grippy nail size is ${result.size} in ${shapeName}! Find yours at grippynails.com`;
+    const text = result.isGiftMode
+      ? `My Grippy nail size is ${result.size} in ${shapeName}! Order here: grippynails.co`
+      : `My Grippy nail size is ${result.size} in ${shapeName}! Find yours at grippynails.co`;
     if (navigator.share) await navigator.share({ text });
     else await navigator.clipboard.writeText(text);
   };
@@ -82,10 +85,11 @@ export default function Results() {
           className="space-y-1"
         >
           <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
-            {shapeName} · {result.hand} hand · Your results
+            {shapeName} · {result.hand} hand · {result.isGiftMode ? "Ready to share" : "Your results"}
           </p>
           <h1 className="font-unbounded text-2xl font-bold text-grippy-black">
-            You're a size<br />{result.size}.
+            {result.isGiftMode ? "Share this with" : "You're a size"}<br />
+            {result.isGiftMode ? "your gifter." : `${result.size}.`}
           </h1>
         </motion.div>
 
@@ -177,14 +181,30 @@ export default function Results() {
           transition={{ delay: 0.4, duration: 0.5 }}
           className="flex flex-col gap-3 mt-auto"
         >
-          <GrippyButton
-            fullWidth
-            size="lg"
-            onClick={() => window.open("https://grippynails.co", "_blank", "noopener,noreferrer")}
-          >
-            <ShoppingBag size={16} />
-            Shop {shapeName} Sets
-          </GrippyButton>
+          {result.isGiftMode ? (
+            <>
+              <GrippyButton fullWidth size="lg" onClick={handleShare}>
+                <Share2 size={16} />
+                Share my size
+              </GrippyButton>
+              <button
+                onClick={() => window.open("https://grippynails.co", "_blank", "noopener,noreferrer")}
+                className="flex items-center justify-center gap-2 font-mono text-xs text-grippy-black/50 underline underline-offset-4 active:text-grippy-black/80 transition-colors"
+              >
+                <ShoppingBag size={13} />
+                Shop {shapeName} Sets
+              </button>
+            </>
+          ) : (
+            <GrippyButton
+              fullWidth
+              size="lg"
+              onClick={() => window.open("https://grippynails.co", "_blank", "noopener,noreferrer")}
+            >
+              <ShoppingBag size={16} />
+              Shop {shapeName} Sets
+            </GrippyButton>
+          )}
         </motion.div>
 
         <button

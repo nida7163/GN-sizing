@@ -1,7 +1,7 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Hand, Undo2 } from "lucide-react";
+import { ArrowLeft, Gift, Hand, Link, Undo2 } from "lucide-react";
 import { GrippyButton } from "@/components/grippy/Button";
 import { ProgressBar } from "@/components/grippy/ProgressBar";
 import { UploadCard } from "@/components/grippy/UploadCard";
@@ -84,7 +84,66 @@ function FrozenCanvas({ imageUrl, left, right }: { imageUrl: string; left: Point
 }
 
 // ── Step 0: Landing ───────────────────────────────────────────────────────────
-function LandingStep({ onStart }: { onStart: () => void }) {
+const STEPS_PREVIEW = [
+  { label: "Pick your hand & shape", time: "10s" },
+  { label: "Photo each finger (5×)", time: "30s each" },
+  { label: "Tap 4 points per photo",  time: "fast" },
+];
+
+function LandingStep({ onStart, isGiftMode }: { onStart: () => void; isGiftMode: boolean }) {
+  const [showGiftShare, setShowGiftShare] = useState(false);
+  const [copied,        setCopied]        = useState(false);
+
+  const handleShareGiftLink = async () => {
+    const url  = `${window.location.origin}${window.location.pathname}?gift=1`;
+    const text = "Find your Grippy nail size in 2 minutes 💅";
+    if (navigator.share) {
+      try { await navigator.share({ title: "Grippy Sizing", text, url }); } catch { /* dismissed */ }
+    } else {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  if (isGiftMode) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col items-center gap-6 max-w-xs"
+        >
+          <div className="w-16 h-16 rounded-2xl bg-grippy-cobalt flex items-center justify-center shadow-lg">
+            <Gift size={28} className="text-grippy-cream" />
+          </div>
+          <div className="space-y-3">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">Someone's gifting you Grippy</p>
+            <h1 className="font-unbounded text-3xl font-bold text-grippy-black leading-tight">
+              Let's find<br />your size
+            </h1>
+            <p className="font-mono text-sm text-grippy-black/50 leading-relaxed">
+              Measure your nails in ~2 minutes.<br />Share your size so they can order you the perfect set.
+            </p>
+          </div>
+
+          <div className="w-full space-y-2 text-left">
+            {STEPS_PREVIEW.map((s, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="font-mono text-[10px] w-4 text-grippy-black/30">{i + 1}</span>
+                <span className="font-mono text-xs text-grippy-black/60 flex-1">{s.label}</span>
+                <span className="font-mono text-[10px] text-grippy-black/30">{s.time}</span>
+              </div>
+            ))}
+          </div>
+
+          <GrippyButton size="lg" fullWidth onClick={onStart}>Find My Size</GrippyButton>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center">
       <motion.div
@@ -101,13 +160,54 @@ function LandingStep({ onStart }: { onStart: () => void }) {
             Find Your<br />Perfect Fit
           </h1>
           <p className="font-mono text-sm text-grippy-black/50 leading-relaxed">
-            A fast sizing experience built<br />for Grippy press-ons.
+            3 quick steps per finger.<br />Done in ~2 minutes.
           </p>
         </div>
+
+        {/* What you'll do — reduces anxiety */}
+        <div className="w-full space-y-2 text-left">
+          {STEPS_PREVIEW.map((s, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <span className="font-mono text-[10px] w-4 text-grippy-black/30">{i + 1}</span>
+              <span className="font-mono text-xs text-grippy-black/60 flex-1">{s.label}</span>
+              <span className="font-mono text-[10px] text-grippy-black/30">{s.time}</span>
+            </div>
+          ))}
+        </div>
+
         <GrippyButton size="lg" fullWidth onClick={onStart}>Start Sizing</GrippyButton>
-        <p className="font-mono text-[10px] text-grippy-black/30 uppercase tracking-widest">
-          Takes ~2 minutes
-        </p>
+
+        {/* Gift mode trigger */}
+        <AnimatePresence mode="wait">
+          {!showGiftShare ? (
+            <motion.button
+              key="gift-link"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setShowGiftShare(true)}
+              className="flex items-center gap-1.5 font-mono text-[11px] text-grippy-black/35 active:text-grippy-black/60 transition-colors"
+            >
+              <Gift size={12} />
+              Gifting someone?
+            </motion.button>
+          ) : (
+            <motion.div
+              key="gift-panel"
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+              className="w-full bg-grippy-black/5 rounded-2xl px-4 py-4 space-y-3 text-left"
+            >
+              <p className="font-mono text-xs text-grippy-black/60 leading-relaxed">
+                Send them this link — they measure their own nails in 2 min and share their size back to you.
+              </p>
+              <button
+                onClick={handleShareGiftLink}
+                className="flex items-center gap-2 w-full justify-center py-2.5 rounded-xl border border-grippy-black/15 font-mono text-xs text-grippy-black/70 active:bg-grippy-black/5 transition-colors"
+              >
+                <Link size={12} />
+                {copied ? "Link copied!" : "Share sizing link"}
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </div>
   );
@@ -192,6 +292,9 @@ function MeasureStep({
 }) {
   const finger = fingerOrder[currentFinger];
   const label  = fingerLabels[finger];
+
+  const FINGER_MOTIVATION = ["Let's go!", "Nice one!", "Halfway!", "Almost there!", "Last one!"];
+  const motivation = FINGER_MOTIVATION[currentFinger] ?? "";
 
   const [phase, setPhase] = useState<FingerPhase>(() => {
     if (!fingerImages[finger])       return "photo";
@@ -315,17 +418,49 @@ function MeasureStep({
     </AnimatePresence>
   );
 
+  // ── Phase stepper ─────────────────────────────────────────────────────────
+  const PHASES: { key: FingerPhase; short: string }[] = [
+    { key: "photo",     short: "Photo" },
+    { key: "calibrate", short: "Calibrate" },
+    { key: "measure",   short: "Measure" },
+  ];
+  const phaseIdx = PHASES.findIndex(p => p.key === phase);
+
+  const phaseStepper = (
+    <div className="flex items-center gap-2">
+      {PHASES.map((p, i) => (
+        <div key={p.key} className="flex items-center gap-2">
+          <span className={[
+            "font-mono text-[10px] transition-colors",
+            i < phaseIdx  ? "text-grippy-black/30 line-through"
+            : i === phaseIdx ? "text-grippy-black font-medium"
+            :                  "text-grippy-black/20",
+          ].join(" ")}>
+            {p.short}
+          </span>
+          {i < PHASES.length - 1 && (
+            <span className="font-mono text-[10px] text-grippy-black/15">→</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+
   // ── Phase: photo ──────────────────────────────────────────────────────────
   if (phase === "photo") {
     return (
       <div className="flex flex-col gap-6 px-5 pt-8">
-        <div className="space-y-2">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
-            Finger {currentFinger + 1} of 5 · {label}
-          </p>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
+              Finger {currentFinger + 1} of 5
+            </p>
+            <span className="font-mono text-[10px] text-grippy-cobalt font-medium">{motivation}</span>
+          </div>
           <h2 className="font-unbounded text-xl font-bold text-grippy-black">
             Photo your {label}
           </h2>
+          {phaseStepper}
         </div>
 
         {chipRow}
@@ -357,14 +492,18 @@ function MeasureStep({
   if (phase === "calibrate") {
     return (
       <div className="flex flex-col gap-6 px-5 pt-8">
-        <div className="space-y-2">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
-            Finger {currentFinger + 1} of 5 · {label}
-          </p>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
+              Finger {currentFinger + 1} of 5
+            </p>
+            <span className="font-mono text-[10px] text-grippy-cobalt font-medium">{motivation}</span>
+          </div>
           <h2 className="font-unbounded text-xl font-bold text-grippy-black">
             Calibrate the photo
           </h2>
-          <p className="font-mono text-sm text-grippy-black/50">
+          {phaseStepper}
+          <p className="font-mono text-sm text-grippy-black/50 pt-1">
             Tap the left then right edge of your reference object.
           </p>
         </div>
@@ -450,13 +589,17 @@ function MeasureStep({
   // ── Phase: measure ────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-6 px-5 pt-8">
-      <div className="space-y-2">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
-          Finger {currentFinger + 1} of 5 · {label}
-        </p>
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
+            Finger {currentFinger + 1} of 5
+          </p>
+          <span className="font-mono text-[10px] text-grippy-cobalt font-medium">{motivation}</span>
+        </div>
         <h2 className="font-unbounded text-xl font-bold text-grippy-black">
           Measure your {label}
         </h2>
+        {phaseStepper}
       </div>
 
       {chipRow}
@@ -516,7 +659,9 @@ function MeasureStep({
 
 // ── Main Size page ────────────────────────────────────────────────────────────
 export default function Size() {
-  const navigate = useNavigate();
+  const navigate     = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isGiftMode   = searchParams.get("gift") === "1";
   const {
     state,
     setStep,
@@ -560,7 +705,7 @@ export default function Size() {
       const { size, confidence, sizedUp, originalSize } = getClosestSize(arr, state.shape ?? "short-round");
       sessionStorage.setItem(
         "grippy_result",
-        JSON.stringify({ size, confidence, sizedUp, originalSize, measurements: state.measurements, hand: state.hand, shape: state.shape })
+        JSON.stringify({ size, confidence, sizedUp, originalSize, isGiftMode, measurements: state.measurements, hand: state.hand, shape: state.shape })
       );
       navigate("/results");
     }
@@ -596,7 +741,7 @@ export default function Size() {
         <AnimatePresence mode="wait">
           {state.step === 0 && (
             <PageContainer key="landing" stepKey="landing">
-              <LandingStep onStart={() => setStep(1)} />
+              <LandingStep onStart={() => setStep(1)} isGiftMode={isGiftMode} />
             </PageContainer>
           )}
           {state.step === 1 && (
