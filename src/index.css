@@ -21,7 +21,11 @@
   }
 
   .pt-safe {
-    padding-top: env(safe-area-inset-top, 12px);
+    padding-top: max(env(safe-area-inset-top), 20px);
+  }
+
+  .pb-safe {
+    padding-bottom: max(env(safe-area-inset-bottom), 32px);
   }
 
   .no-scrollbar::-webkit-scrollbar { display: none; }

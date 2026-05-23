@@ -60,7 +60,7 @@ export default function Results() {
   return (
     <div className="min-h-screen grippy-surface flex flex-col">
       {/* Nav */}
-      <div className="flex items-center justify-between px-6 pt-safe pb-2 sticky top-0 z-10 bg-grippy-cream/80 backdrop-blur-sm">
+      <div className="flex items-center justify-between px-6 pt-safe pb-4 sticky top-0 z-10 bg-grippy-cream/80 backdrop-blur-sm">
         <button
           onClick={() => navigate("/size")}
           className="flex items-center gap-1.5 text-grippy-black/60 font-unbounded text-xs font-semibold active:text-grippy-black transition-colors"
@@ -74,7 +74,7 @@ export default function Results() {
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col gap-5 px-5 pt-4 pb-10">
+      <div className="flex-1 flex flex-col gap-5 px-6 pt-6 pb-safe">
         <motion.div
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
           className="space-y-1"

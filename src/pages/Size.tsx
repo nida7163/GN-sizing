@@ -116,7 +116,7 @@ function LandingStep({ onStart }: { onStart: () => void }) {
 // ── Step 1: Hand selection ────────────────────────────────────────────────────
 function HandStep({ onSelect }: { onSelect: (hand: "left" | "right") => void }) {
   return (
-    <div className="flex flex-col gap-8 px-6 pt-4">
+    <div className="flex flex-col gap-8 px-6 pt-8">
       <div className="space-y-2">
         <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">Step 1 of 2</p>
         <h2 className="font-unbounded text-2xl font-bold text-grippy-black">Which hand<br />are you sizing?</h2>
@@ -143,7 +143,7 @@ function ShapeStep({ onSelect }: { onSelect: (shape: NailShape) => void }) {
     { id: "short-oval",  label: "Short Oval",  description: "Softly tapered sides" },
   ];
   return (
-    <div className="flex flex-col gap-8 px-6 pt-4">
+    <div className="flex flex-col gap-8 px-6 pt-8">
       <div className="space-y-2">
         <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">Step 2 of 2</p>
         <h2 className="font-unbounded text-2xl font-bold text-grippy-black">Which shape<br />are you sizing for?</h2>
@@ -253,7 +253,7 @@ function MeasureStep({
 
   // ── Finger chip row ───────────────────────────────────────────────────────
   const chipRow = (
-    <div className="flex items-center gap-2 px-2">
+    <div className="flex items-center gap-2">
       <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1">
         {fingerOrder.map((f, i) => {
           const done      = measurements[f] !== undefined;
@@ -302,7 +302,7 @@ function MeasureStep({
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
           exit={{ opacity: 0, height: 0 }}
-          className="overflow-hidden px-2"
+          className="overflow-hidden"
         >
           <div className="flex flex-col gap-2 pb-1">
             <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
@@ -318,8 +318,8 @@ function MeasureStep({
   // ── Phase: photo ──────────────────────────────────────────────────────────
   if (phase === "photo") {
     return (
-      <div className="flex flex-col gap-5 px-4 pt-4">
-        <div className="px-2 space-y-2">
+      <div className="flex flex-col gap-6 px-5 pt-8">
+        <div className="space-y-2">
           <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
             Finger {currentFinger + 1} of 5 · {label}
           </p>
@@ -331,16 +331,16 @@ function MeasureStep({
         {chipRow}
         {reviewPanel}
 
-        <div className="bg-grippy-black/5 rounded-2xl px-4 py-3 space-y-2 mx-2">
+        <div className="bg-grippy-black/5 rounded-2xl px-4 py-4 space-y-2">
           <p className="font-unbounded text-xs font-semibold text-grippy-black">Tips:</p>
-          <ul className="space-y-1.5">
+          <ul className="space-y-2">
             {[
               `Rest your ${label.toLowerCase()} flat on a table, nail facing up`,
               `Place the ${REF_OBJECTS[refIdx].label.toLowerCase()} flat on the same table right beside your nail — not under or over it`,
               "Hold your phone directly above, pointing straight down",
               "Get close so the nail fills most of the frame",
             ].map(tip => (
-              <li key={tip} className="flex items-start gap-2 font-mono text-[11px] text-grippy-black/60">
+              <li key={tip} className="flex items-start gap-2 font-mono text-[11px] text-grippy-black/60 leading-relaxed">
                 <span className="text-grippy-black/30 mt-0.5 shrink-0">—</span>
                 {tip}
               </li>
@@ -348,9 +348,7 @@ function MeasureStep({
           </ul>
         </div>
 
-        <div className="px-2">
-          <UploadCard onFile={handlePhoto} />
-        </div>
+        <UploadCard onFile={handlePhoto} />
       </div>
     );
   }
@@ -358,8 +356,8 @@ function MeasureStep({
   // ── Phase: calibrate ──────────────────────────────────────────────────────
   if (phase === "calibrate") {
     return (
-      <div className="flex flex-col gap-5 px-4 pt-4">
-        <div className="px-2 space-y-2">
+      <div className="flex flex-col gap-6 px-5 pt-8">
+        <div className="space-y-2">
           <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
             Finger {currentFinger + 1} of 5 · {label}
           </p>
@@ -373,7 +371,7 @@ function MeasureStep({
 
         {chipRow}
 
-        <div className="flex flex-col gap-2 px-2">
+        <div className="flex flex-col gap-2">
           <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
             What reference object did you use?
           </p>
@@ -398,13 +396,13 @@ function MeasureStep({
           </p>
         </div>
 
-        <div className="flex items-center justify-between px-2">
+        <div className="flex items-center justify-between">
           <span className="font-mono text-[11px] text-grippy-black/50">
             Tap the outer edges of the {REF_OBJECTS[refIdx].label.toLowerCase()}
           </span>
           <button
             onClick={handleRetakePhoto}
-            className="font-mono text-[11px] text-grippy-black/40 underline underline-offset-2 active:text-grippy-black"
+            className="font-mono text-[11px] text-grippy-black/40 underline underline-offset-2 active:text-grippy-black ml-4 shrink-0"
           >
             Retake photo
           </button>
@@ -423,7 +421,7 @@ function MeasureStep({
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
-              className="mx-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 space-y-3"
+              className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-4 space-y-3"
             >
               <p className="font-mono text-xs text-amber-800 leading-relaxed">
                 Those points seem too close or too far apart — did you tap the outer edges of the {REF_OBJECTS[refIdx].label.toLowerCase()}?
@@ -431,13 +429,13 @@ function MeasureStep({
               <div className="flex gap-2">
                 <button
                   onClick={() => { setCalWarn(null); setCalCanvasKey(k => k + 1); }}
-                  className="flex-1 py-2 rounded-xl bg-amber-100 font-mono text-xs text-amber-800 font-medium active:bg-amber-200 transition-colors"
+                  className="flex-1 py-2.5 rounded-xl bg-amber-100 font-mono text-xs text-amber-800 font-medium active:bg-amber-200 transition-colors"
                 >
                   Try Again
                 </button>
                 <button
                   onClick={() => commitCalibrate(calWarn.left, calWarn.right)}
-                  className="flex-1 py-2 rounded-xl bg-grippy-black/5 font-mono text-xs text-grippy-black/60 active:bg-grippy-black/10 transition-colors"
+                  className="flex-1 py-2.5 rounded-xl bg-grippy-black/5 font-mono text-xs text-grippy-black/60 active:bg-grippy-black/10 transition-colors"
                 >
                   Accept Anyway
                 </button>
@@ -451,8 +449,8 @@ function MeasureStep({
 
   // ── Phase: measure ────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col gap-5 px-4 pt-4">
-      <div className="px-2 space-y-2">
+    <div className="flex flex-col gap-6 px-5 pt-8">
+      <div className="space-y-2">
         <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
           Finger {currentFinger + 1} of 5 · {label}
         </p>
@@ -464,13 +462,13 @@ function MeasureStep({
       {chipRow}
       {reviewPanel}
 
-      <div className="flex items-center justify-between px-2">
+      <div className="flex items-center justify-between">
         <span className="font-mono text-[11px] text-grippy-black/50">
           Tap the <span className="text-grippy-black font-medium">widest point</span> near the base of your {label} nail
         </span>
         <button
           onClick={handleRetakePhoto}
-          className="font-mono text-[11px] text-grippy-black/40 underline underline-offset-2 active:text-grippy-black"
+          className="font-mono text-[11px] text-grippy-black/40 underline underline-offset-2 active:text-grippy-black ml-4 shrink-0"
         >
           Retake photo
         </button>
@@ -490,7 +488,7 @@ function MeasureStep({
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
-            className="mx-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 space-y-3"
+            className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-4 space-y-3"
           >
             <p className="font-mono text-xs text-amber-800 leading-relaxed">
               That measures {measureWarn.mm.toFixed(1)} mm — typical nails are 8–20 mm wide. Did you tap the right spots?
@@ -498,13 +496,13 @@ function MeasureStep({
             <div className="flex gap-2">
               <button
                 onClick={() => { setMeasureWarn(null); setCanvasKey(k => k + 1); }}
-                className="flex-1 py-2 rounded-xl bg-amber-100 font-mono text-xs text-amber-800 font-medium active:bg-amber-200 transition-colors"
+                className="flex-1 py-2.5 rounded-xl bg-amber-100 font-mono text-xs text-amber-800 font-medium active:bg-amber-200 transition-colors"
               >
                 Try Again
               </button>
               <button
                 onClick={() => { onMeasure(currentFinger, measureWarn.dist, measureWarn.left, measureWarn.right); setMeasureWarn(null); }}
-                className="flex-1 py-2 rounded-xl bg-grippy-black/5 font-mono text-xs text-grippy-black/60 active:bg-grippy-black/10 transition-colors"
+                className="flex-1 py-2.5 rounded-xl bg-grippy-black/5 font-mono text-xs text-grippy-black/60 active:bg-grippy-black/10 transition-colors"
               >
                 Accept Anyway
               </button>
@@ -574,7 +572,7 @@ export default function Size() {
   return (
     <div className="min-h-screen grippy-surface flex flex-col">
       {state.step > 0 && (
-        <div className="flex items-center justify-between px-6 pt-safe pb-2 sticky top-0 z-10 bg-grippy-cream/80 backdrop-blur-sm">
+        <div className="flex items-center justify-between px-6 pt-safe pb-4 sticky top-0 z-10 bg-grippy-cream/80 backdrop-blur-sm">
           <button
             onClick={goBack}
             className="flex items-center gap-1.5 text-grippy-black/60 font-unbounded text-xs font-semibold active:text-grippy-black transition-colors"
@@ -594,7 +592,7 @@ export default function Size() {
         </div>
       )}
 
-      <div className="flex-1 pb-10">
+      <div className="flex-1 pb-safe">
         <AnimatePresence mode="wait">
           {state.step === 0 && (
             <PageContainer key="landing" stepKey="landing">
