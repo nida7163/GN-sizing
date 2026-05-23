@@ -59,8 +59,8 @@ export function getClosestSize(
     }
   }
 
-  const maxDist = 8;
-  const confidence = Math.max(30, Math.round((1 - Math.min(bestDistance, maxDist) / maxDist) * 100));
+  const maxDist = 12;
+  const confidence = Math.max(40, Math.round((1 - Math.min(bestDistance, maxDist) / maxDist) * 100));
 
   return { size: bestSize, confidence };
 }

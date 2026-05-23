@@ -307,10 +307,10 @@ function MeasureStep({
           <p className="font-unbounded text-xs font-semibold text-grippy-black">Tips:</p>
           <ul className="space-y-1.5">
             {[
-              `Lay your ${label.toLowerCase()} flat on a plain surface`,
-              "Place a coin or credit card next to your finger",
-              "Fill the frame — finger and coin both visible",
-              "Get close for better accuracy",
+              `Rest your ${label.toLowerCase()} flat on a table, nail facing up`,
+              `Place the ${REF_OBJECTS[refIdx].label.toLowerCase()} flat on the same table right beside your nail — not under or over it`,
+              "Hold your phone directly above, pointing straight down",
+              "Get close so the nail fills most of the frame",
             ].map(tip => (
               <li key={tip} className="flex items-start gap-2 font-mono text-[11px] text-grippy-black/60">
                 <span className="text-grippy-black/30 mt-0.5 shrink-0">—</span>

@@ -71,13 +71,15 @@ export function useSizing() {
 
   const recordMeasurement = useCallback((
     fingerIndex: number,
-    widthPx: number,
+    _widthPx: number,
     left: Point,
     right: Point,
   ) => {
     const finger = fingerOrder[fingerIndex];
     setState(s => {
       const pixelsPerMm = s.calibration?.pixelsPerMm ?? 5;
+      // Use horizontal X-distance only — consistent with how calibration is measured
+      const widthPx     = Math.abs(right.x - left.x);
       const widthMm     = pixelsToMm(widthPx, pixelsPerMm);
       const next        = { ...s.measurements,      [finger]: widthMm };
       const nextPoints  = { ...s.measurementPoints, [finger]: { left, right } };
