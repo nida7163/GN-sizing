@@ -11,6 +11,7 @@ export interface CalibrationData {
 
 export type MeasurementMap = Partial<Record<FingerName, number>>;
 export type MeasurementPointsMap = Partial<Record<FingerName, { left: Point; right: Point }>>;
+export type FingerImagesMap = Partial<Record<FingerName, string>>;
 
 export interface SizingState {
   step: number;
@@ -21,6 +22,7 @@ export interface SizingState {
   calibration: CalibrationData | null;
   measurements: MeasurementMap;
   measurementPoints: MeasurementPointsMap;
+  fingerImages: FingerImagesMap;
   currentFinger: number;
 }
 
@@ -33,6 +35,7 @@ const initialState: SizingState = {
   calibration: null,
   measurements: {},
   measurementPoints: {},
+  fingerImages: {},
   currentFinger: 0,
 };
 
@@ -60,6 +63,10 @@ export function useSizing() {
     const pixelWidth = Math.abs(right.x - left.x);
     const pixelsPerMm = pixelWidth > 0 ? pixelWidth / 20 : 5;
     setState(s => ({ ...s, calibration: { left, right, pixelsPerMm }, step: 5 }));
+  }, []);
+
+  const setFingerImage = useCallback((finger: FingerName, url: string) => {
+    setState(s => ({ ...s, fingerImages: { ...s.fingerImages, [finger]: url } }));
   }, []);
 
   const recordMeasurement = useCallback((
@@ -112,6 +119,7 @@ export function useSizing() {
     setShape,
     setImage,
     setCalibration,
+    setFingerImage,
     recordMeasurement,
     undoMeasurement,
     getMeasurementArray,
