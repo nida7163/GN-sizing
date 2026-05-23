@@ -9,8 +9,8 @@ import { MeasurementCanvas } from "@/components/grippy/MeasurementCanvas";
 import { PageContainer } from "@/components/grippy/PageContainer";
 import { useSizing } from "@/hooks/use-sizing";
 import type { Point, MeasurementPointsMap, FingerImagesMap, FingerCalibrationsMap, MeasurementMap } from "@/hooks/use-sizing";
-import { fingerOrder, fingerLabels, getClosestSize, NailShape } from "@/lib/sizeChart";
-import type { FingerName } from "@/lib/sizeChart";
+import { fingerOrder, fingerLabels, getClosestSize, sizeCharts, NailShape } from "@/lib/sizeChart";
+import type { FingerName, SizeKey } from "@/lib/sizeChart";
 
 const PROGRESS_TOTAL = 8; // 0=Landing, 1=Hand, 2=Shape, 3–7=Thumb–Pinky
 
@@ -269,12 +269,15 @@ function ShapeStep({ onSelect }: { onSelect: (shape: NailShape) => void }) {
 // ── Step 3: Per-finger photo → calibrate → measure ────────────────────────────
 type FingerPhase = "photo" | "calibrate" | "measure";
 
+const SIZE_ORDER: SizeKey[] = ["XS", "S", "M", "L"];
+
 function MeasureStep({
   currentFinger,
   fingerImages,
   fingerCalibrations,
   measurementPoints,
   measurements,
+  shape,
   onSetFingerImage,
   onCalibrate,
   onMeasure,
@@ -285,6 +288,7 @@ function MeasureStep({
   fingerCalibrations: FingerCalibrationsMap;
   measurementPoints: MeasurementPointsMap;
   measurements: MeasurementMap;
+  shape: NailShape | null;
   onSetFingerImage: (finger: FingerName, url: string) => void;
   onCalibrate: (finger: FingerName, left: Point, right: Point, referenceMm?: number) => void;
   onMeasure: (fingerIdx: number, distPx: number, left: Point, right: Point) => void;
@@ -394,24 +398,113 @@ function MeasureStep({
   );
 
   // ── Review panel ─────────────────────────────────────────────────────────
-  const reviewPts = reviewIdx !== null ? measurementPoints[fingerOrder[reviewIdx]] : undefined;
-  const reviewImg = reviewIdx !== null ? fingerImages[fingerOrder[reviewIdx]]      : undefined;
+  const reviewFinger = reviewIdx !== null ? fingerOrder[reviewIdx] : null;
+  const reviewMm     = reviewFinger != null ? measurements[reviewFinger] : undefined;
+  const reviewPts    = reviewFinger != null ? measurementPoints[reviewFinger] : undefined;
+  const reviewImg    = reviewFinger != null ? fingerImages[reviewFinger]      : undefined;
+
+  // Per-finger size comparison: which size does this single finger map to?
+  const fingerSizeRanking = (reviewFinger != null && reviewMm != null && shape != null)
+    ? SIZE_ORDER.map(sz => ({
+        size: sz,
+        target: sizeCharts[shape][sz][reviewIdx!],
+        diff: reviewMm - sizeCharts[shape][sz][reviewIdx!],
+      })).sort((a, b) => Math.abs(a.diff) - Math.abs(b.diff))
+    : null;
+  const closestSize = fingerSizeRanking?.[0]?.size ?? null;
 
   const reviewPanel = (
     <AnimatePresence>
-      {reviewIdx !== null && reviewPts && reviewImg && (
+      {reviewIdx !== null && reviewFinger != null && reviewMm != null && (
         <motion.div
           key={`review-${reviewIdx}`}
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
           exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.25 }}
           className="overflow-hidden"
         >
-          <div className="flex flex-col gap-2 pb-1">
-            <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
-              {fingerLabels[fingerOrder[reviewIdx]]} — tap chip again to close
-            </p>
-            <FrozenCanvas imageUrl={reviewImg} left={reviewPts.left} right={reviewPts.right} />
+          <div className="bg-grippy-black/[0.04] rounded-2xl px-4 py-4 space-y-3">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
+                {fingerLabels[reviewFinger]}
+              </p>
+              <button
+                onClick={() => setReviewIdx(null)}
+                className="font-mono text-[10px] text-grippy-black/30 active:text-grippy-black/60"
+              >
+                close ×
+              </button>
+            </div>
+
+            {/* Big mm + size comparison */}
+            <div className="flex items-end gap-4">
+              <div>
+                <p className="font-unbounded text-3xl font-bold text-grippy-black tabular-nums leading-none">
+                  {reviewMm.toFixed(1)}
+                </p>
+                <p className="font-mono text-[10px] text-grippy-black/40 mt-0.5">mm width</p>
+              </div>
+              {closestSize && (
+                <div className="flex flex-col items-start gap-1 pb-0.5">
+                  <p className="font-mono text-[10px] text-grippy-black/40">this finger →</p>
+                  <div className="flex gap-1">
+                    {SIZE_ORDER.map(sz => (
+                      <span
+                        key={sz}
+                        className={[
+                          "font-mono text-[10px] px-2 py-0.5 rounded-full border transition-colors",
+                          sz === closestSize
+                            ? "bg-grippy-black text-grippy-cream border-grippy-black"
+                            : "border-grippy-black/15 text-grippy-black/30",
+                        ].join(" ")}
+                      >
+                        {sz}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Diff bar vs each size */}
+            {fingerSizeRanking && (
+              <div className="space-y-1.5">
+                {fingerSizeRanking.map(({ size, target, diff }) => (
+                  <div key={size} className="flex items-center gap-2">
+                    <span className="font-mono text-[9px] w-5 text-grippy-black/40">{size}</span>
+                    <span className="font-mono text-[9px] text-grippy-black/30 w-12 tabular-nums">
+                      {target} mm
+                    </span>
+                    <div className="flex-1 h-1 bg-grippy-black/8 rounded-full overflow-hidden">
+                      <div
+                        className={[
+                          "h-full rounded-full",
+                          Math.abs(diff) <= 0.5 ? "bg-emerald-500"
+                          : Math.abs(diff) <= 1.5 ? "bg-amber-400"
+                          : "bg-rose-400",
+                        ].join(" ")}
+                        style={{ width: `${Math.max(4, 100 - Math.abs(diff) * 20)}%` }}
+                      />
+                    </div>
+                    <span className={[
+                      "font-mono text-[9px] tabular-nums w-8 text-right",
+                      Math.abs(diff) <= 0.5 ? "text-emerald-500"
+                      : Math.abs(diff) <= 1.5 ? "text-amber-500"
+                      : "text-rose-400",
+                    ].join(" ")}>
+                      {diff > 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Photo overlay if available in this session */}
+            {reviewPts && reviewImg && (
+              <FrozenCanvas imageUrl={reviewImg} left={reviewPts.left} right={reviewPts.right} />
+            )}
           </div>
         </motion.div>
       )}
@@ -763,6 +856,7 @@ export default function Size() {
                 fingerCalibrations={state.fingerCalibrations}
                 measurementPoints={state.measurementPoints}
                 measurements={state.measurements}
+                shape={state.shape}
                 onSetFingerImage={setFingerImage}
                 onCalibrate={setFingerCalibration}
                 onMeasure={recordMeasurement}
