@@ -96,9 +96,9 @@ function LandingStep({ onStart, isGiftMode }: { onStart: () => void; isGiftMode:
 
   const handleShareGiftLink = async () => {
     const url  = `${window.location.origin}${window.location.pathname}?gift=1`;
-    const text = "Find your Grippy nail size in 2 minutes 💅";
+    const text = "Find your Grippy Fit nail size in 2 minutes 💅";
     if (navigator.share) {
-      try { await navigator.share({ title: "Grippy Sizing", text, url }); } catch { /* dismissed */ }
+      try { await navigator.share({ title: "Grippy Fit Sizing", text, url }); } catch { /* dismissed */ }
     } else {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -819,7 +819,7 @@ export default function Size() {
             Back
           </button>
           <span className="font-unbounded text-xs font-black text-grippy-cobalt tracking-tight">
-            GRIPPY
+            GRIPPY FIT
           </span>
         </div>
       )}

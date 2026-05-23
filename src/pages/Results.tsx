@@ -51,8 +51,8 @@ export default function Results() {
     if (!result) return;
     const shapeName = shapeLabels[result.shape] ?? result.shape;
     const text = result.isGiftMode
-      ? `My Grippy nail size is ${result.size} in ${shapeName}! Order here: grippynails.co`
-      : `My Grippy nail size is ${result.size} in ${shapeName}! Find yours at grippynails.co`;
+      ? `My Grippy Fit nail size is ${result.size} in ${shapeName}! Order here: grippynails.co`
+      : `My Grippy Fit nail size is ${result.size} in ${shapeName}! Find yours at grippynails.co`;
     if (navigator.share) await navigator.share({ text });
     else await navigator.clipboard.writeText(text);
   };
@@ -73,7 +73,7 @@ export default function Results() {
           <ArrowLeft size={16} />
           Resize
         </button>
-        <span className="font-unbounded text-xs font-black text-grippy-cobalt tracking-tight">GRIPPY</span>
+        <span className="font-unbounded text-xs font-black text-grippy-cobalt tracking-tight">GRIPPY FIT</span>
         <button onClick={handleShare} className="text-grippy-black/50 active:text-grippy-black transition-colors">
           <Share2 size={18} />
         </button>

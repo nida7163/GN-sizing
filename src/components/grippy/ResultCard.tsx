@@ -38,7 +38,7 @@ export function ResultCard({ size, confidence, className }: ResultCardProps) {
         </motion.div>
 
         <div className="text-center space-y-1">
-          <p className="font-unbounded text-base text-grippy-cream/70">Your Grippy Size</p>
+          <p className="font-unbounded text-base text-grippy-cream/70">Your Grippy Fit Size</p>
         </div>
 
         {/* Match percentage */}
