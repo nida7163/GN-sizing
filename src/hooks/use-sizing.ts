@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { fingerOrder, FingerName, pixelsToMm, NailShape } from "@/lib/sizeChart";
 
 export interface Point { x: number; y: number }
@@ -38,8 +38,34 @@ const initialState: SizingState = {
   currentFinger: 0,
 };
 
+const STORAGE_KEY = "grippy_sizing";
+
+// Blob URLs are tab-local and don't survive a reload — omit fingerImages when persisting.
+function loadSavedState(): SizingState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return initialState;
+    const saved = JSON.parse(raw);
+    return { ...initialState, ...saved, fingerImages: {} };
+  } catch {
+    return initialState;
+  }
+}
+
 export function useSizing() {
-  const [state, setState] = useState<SizingState>(initialState);
+  const [state, setState] = useState<SizingState>(loadSavedState);
+
+  // Persist on every state change. Skip step 0 (blank slate) and step 6 (done → clear).
+  // Never persist fingerImages — blob URLs are tab-local and break after reload.
+  useEffect(() => {
+    if (state.step >= 1 && state.step < 6) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { fingerImages: _omit, ...persistable } = state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(persistable));
+    } else if (state.step === 0 || state.step >= 6) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }, [state]);
 
   const setStep = useCallback((step: number) => {
     setState(s => ({ ...s, step }));
