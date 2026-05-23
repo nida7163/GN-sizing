@@ -8,35 +8,37 @@ import { UploadCard } from "@/components/grippy/UploadCard";
 import { MeasurementCanvas } from "@/components/grippy/MeasurementCanvas";
 import { PageContainer } from "@/components/grippy/PageContainer";
 import { useSizing } from "@/hooks/use-sizing";
-import type { Point, MeasurementPointsMap, FingerImagesMap } from "@/hooks/use-sizing";
+import type { Point, MeasurementPointsMap, FingerImagesMap, FingerCalibrationsMap } from "@/hooks/use-sizing";
 import { fingerOrder, fingerLabels, getClosestSize, NailShape } from "@/lib/sizeChart";
 import type { FingerName } from "@/lib/sizeChart";
 
-const TOTAL_STEPS = 7;
+const PROGRESS_TOTAL = 8; // 0=Landing, 1=Hand, 2=Shape, 3–7=Thumb–Pinky
 
-// ── Nail shape SVG icon ──────────────────────────────────────────────────────
+const REF_OBJECTS = [
+  { label: "Penny / Dime", mm: 19 },
+  { label: "Quarter",      mm: 24 },
+  { label: "Credit card",  mm: 54 },
+] as const;
+
+// ── Nail shape SVG ────────────────────────────────────────────────────────────
 function NailShapeIcon({ shape }: { shape: NailShape }) {
   if (shape === "short-round") {
     return (
       <svg width="44" height="48" viewBox="0 0 44 48" fill="none" className="text-grippy-black">
-        <path
-          d="M4 24 L4 44 Q4 46 6 46 L38 46 Q40 46 40 44 L40 24 Q40 4 22 4 Q4 4 4 24 Z"
-          stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round"
-        />
+        <path d="M4 24 L4 44 Q4 46 6 46 L38 46 Q40 46 40 44 L40 24 Q40 4 22 4 Q4 4 4 24 Z"
+          stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
       </svg>
     );
   }
   return (
     <svg width="36" height="52" viewBox="0 0 36 52" fill="none" className="text-grippy-black">
-      <path
-        d="M4 30 L4 48 Q4 50 6 50 L30 50 Q32 50 32 48 L32 30 Q32 4 18 4 Q4 4 4 30 Z"
-        stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round"
-      />
+      <path d="M4 30 L4 48 Q4 50 6 50 L30 50 Q32 50 32 48 L32 30 Q32 4 18 4 Q4 4 4 30 Z"
+        stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
     </svg>
   );
 }
 
-// ── Frozen canvas: draws a close-up photo with measurement overlay ────────────
+// ── Frozen canvas: static measurement overlay for review ─────────────────────
 function FrozenCanvas({ imageUrl, left, right }: { imageUrl: string; left: Point; right: Point }) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -52,7 +54,6 @@ function FrozenCanvas({ imageUrl, left, right }: { imageUrl: string; left: Point
       canvas.height = maxW * (img.naturalHeight / img.naturalWidth);
       const ctx = canvas.getContext("2d")!;
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
       const drawMarker = (p: Point) => {
         ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
         ctx.fillStyle = "#0D0D0D"; ctx.globalAlpha = 0.25; ctx.fill();
@@ -82,7 +83,7 @@ function FrozenCanvas({ imageUrl, left, right }: { imageUrl: string; left: Point
   );
 }
 
-// ── Step 0: Landing ──────────────────────────────────────────────────────────
+// ── Step 0: Landing ───────────────────────────────────────────────────────────
 function LandingStep({ onStart }: { onStart: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen px-6 text-center">
@@ -112,12 +113,12 @@ function LandingStep({ onStart }: { onStart: () => void }) {
   );
 }
 
-// ── Step 1: Hand selection ───────────────────────────────────────────────────
+// ── Step 1: Hand selection ────────────────────────────────────────────────────
 function HandStep({ onSelect }: { onSelect: (hand: "left" | "right") => void }) {
   return (
     <div className="flex flex-col gap-8 px-6 pt-4">
       <div className="space-y-2">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">Step 1 of 5</p>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">Step 1 of 2</p>
         <h2 className="font-unbounded text-2xl font-bold text-grippy-black">Which hand<br />are you sizing?</h2>
       </div>
       <div className="grid grid-cols-2 gap-4">
@@ -135,7 +136,7 @@ function HandStep({ onSelect }: { onSelect: (hand: "left" | "right") => void }) 
   );
 }
 
-// ── Step 2: Shape selection ──────────────────────────────────────────────────
+// ── Step 2: Shape selection ───────────────────────────────────────────────────
 function ShapeStep({ onSelect }: { onSelect: (shape: NailShape) => void }) {
   const shapes: { id: NailShape; label: string; description: string }[] = [
     { id: "short-round", label: "Short Round", description: "Classic rounded edge" },
@@ -144,7 +145,7 @@ function ShapeStep({ onSelect }: { onSelect: (shape: NailShape) => void }) {
   return (
     <div className="flex flex-col gap-8 px-6 pt-4">
       <div className="space-y-2">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">Step 2 of 5</p>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">Step 2 of 2</p>
         <h2 className="font-unbounded text-2xl font-bold text-grippy-black">Which shape<br />are you sizing for?</h2>
       </div>
       <div className="grid grid-cols-2 gap-4">
@@ -165,94 +166,56 @@ function ShapeStep({ onSelect }: { onSelect: (shape: NailShape) => void }) {
   );
 }
 
-// ── Step 3: Calibration photo ────────────────────────────────────────────────
-function CalibrationPhotoStep({
-  preview, onFile, onNext,
-}: { preview: string | null; onFile: (f: File) => void; onNext: () => void }) {
-  return (
-    <div className="flex flex-col gap-5 px-6 pt-4">
-      <div className="space-y-2">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">Step 3 of 5</p>
-        <h2 className="font-unbounded text-2xl font-bold text-grippy-black">
-          Calibration photo
-        </h2>
-        <p className="font-mono text-sm text-grippy-black/50">
-          One photo of a reference object so we can convert pixels to mm.
-        </p>
-      </div>
-      <div className="bg-grippy-black/5 rounded-2xl px-4 py-3 space-y-2">
-        <p className="font-unbounded text-xs font-semibold text-grippy-black">Tips:</p>
-        <ul className="space-y-1.5">
-          {[
-            "Place a coin or credit card on a flat surface",
-            "Fill the frame so both edges are visible",
-            "Remember this height — you'll use it for finger photos",
-          ].map(tip => (
-            <li key={tip} className="flex items-start gap-2 font-mono text-[11px] text-grippy-black/60">
-              <span className="text-grippy-black/30 mt-0.5 shrink-0">—</span>
-              {tip}
-            </li>
-          ))}
-        </ul>
-      </div>
-      <UploadCard onFile={onFile} preview={preview} />
-      {preview && <GrippyButton fullWidth onClick={onNext}>Looks good — Continue</GrippyButton>}
-    </div>
-  );
-}
+// ── Step 3: Per-finger photo → calibrate → measure ────────────────────────────
+type FingerPhase = "photo" | "calibrate" | "measure";
 
-// ── Step 4: Calibration tap ──────────────────────────────────────────────────
-function CalibrationStep({
-  imageUrl, onDone,
-}: { imageUrl: string; onDone: (distPx: number, l: Point, r: Point) => void }) {
-  return (
-    <div className="flex flex-col gap-5 px-4 pt-4">
-      <div className="px-2 space-y-2">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">Step 4 of 5</p>
-        <h2 className="font-unbounded text-xl font-bold text-grippy-black">
-          Calibrate with a reference object
-        </h2>
-        <p className="font-mono text-sm text-grippy-black/50">
-          Tap the left then right edge of the coin or card.
-        </p>
-      </div>
-      <MeasurementCanvas
-        imageUrl={imageUrl}
-        prompt="Tap both edges of your coin or card"
-        onMeasure={(dist, l, r) => onDone(dist, l, r)}
-      />
-    </div>
-  );
-}
-
-// ── Step 5: Per-finger photo + measure ───────────────────────────────────────
 function MeasureStep({
   currentFinger,
   fingerImages,
+  fingerCalibrations,
   measurementPoints,
   onSetFingerImage,
+  onCalibrate,
   onMeasure,
   onUndo,
 }: {
   currentFinger: number;
   fingerImages: FingerImagesMap;
+  fingerCalibrations: FingerCalibrationsMap;
   measurementPoints: MeasurementPointsMap;
   onSetFingerImage: (finger: FingerName, url: string) => void;
+  onCalibrate: (finger: FingerName, left: Point, right: Point, referenceMm?: number) => void;
   onMeasure: (fingerIdx: number, distPx: number, left: Point, right: Point) => void;
   onUndo: () => void;
 }) {
-  const finger    = fingerOrder[currentFinger];
-  const label     = fingerLabels[finger];
-  const remaining = fingerOrder.length - currentFinger;
+  const finger = fingerOrder[currentFinger];
+  const label  = fingerLabels[finger];
 
-  // Seed from state so undo restores existing photo
-  const [photoUrl, setPhotoUrl] = useState<string | null>(fingerImages[finger] ?? null);
+  const [phase, setPhase] = useState<FingerPhase>(() => {
+    if (!fingerImages[finger])       return "photo";
+    if (!fingerCalibrations[finger]) return "calibrate";
+    return "measure";
+  });
+
+  const [photoUrl,  setPhotoUrl]  = useState<string | null>(fingerImages[finger] ?? null);
+  const [refIdx,    setRefIdx]    = useState(1); // default: Quarter
   const [reviewIdx, setReviewIdx] = useState<number | null>(null);
 
   const handlePhoto = (file: File) => {
     const url = URL.createObjectURL(file);
     onSetFingerImage(finger, url);
     setPhotoUrl(url);
+    setPhase("calibrate");
+  };
+
+  const handleCalibrate = (_dist: number, left: Point, right: Point) => {
+    onCalibrate(finger, left, right, REF_OBJECTS[refIdx].mm);
+    setPhase("measure");
+  };
+
+  const handleRetake = () => {
+    setPhotoUrl(null);
+    setPhase("photo");
   };
 
   const handleChipClick = (i: number) => {
@@ -260,7 +223,7 @@ function MeasureStep({
     setReviewIdx(prev => prev === i ? null : i);
   };
 
-  // ── Shared chip row ──────────────────────────────────────────────────────
+  // ── Finger chip row ───────────────────────────────────────────────────────
   const chipRow = (
     <div className="flex items-center gap-2 px-2">
       <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1">
@@ -324,13 +287,13 @@ function MeasureStep({
     </AnimatePresence>
   );
 
-  // ── Phase 1: Take close-up photo ─────────────────────────────────────────
-  if (!photoUrl) {
+  // ── Phase: photo ──────────────────────────────────────────────────────────
+  if (phase === "photo") {
     return (
       <div className="flex flex-col gap-5 px-4 pt-4">
         <div className="px-2 space-y-2">
           <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
-            Step 5 of 5 · {remaining} nail{remaining !== 1 ? "s" : ""} left
+            Finger {currentFinger + 1} of 5 · {label}
           </p>
           <h2 className="font-unbounded text-xl font-bold text-grippy-black">
             Photo your {label}
@@ -345,8 +308,9 @@ function MeasureStep({
           <ul className="space-y-1.5">
             {[
               `Lay your ${label.toLowerCase()} flat on a plain surface`,
-              "Get close — nail should fill most of the frame",
-              "Same phone height as your calibration photo",
+              "Place a coin or credit card next to your finger",
+              "Fill the frame — finger and coin both visible",
+              "Get close for better accuracy",
             ].map(tip => (
               <li key={tip} className="flex items-start gap-2 font-mono text-[11px] text-grippy-black/60">
                 <span className="text-grippy-black/30 mt-0.5 shrink-0">—</span>
@@ -363,15 +327,80 @@ function MeasureStep({
     );
   }
 
-  // ── Phase 2: Measure the nail ─────────────────────────────────────────────
+  // ── Phase: calibrate ──────────────────────────────────────────────────────
+  if (phase === "calibrate") {
+    return (
+      <div className="flex flex-col gap-5 px-4 pt-4">
+        <div className="px-2 space-y-2">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
+            Finger {currentFinger + 1} of 5 · {label}
+          </p>
+          <h2 className="font-unbounded text-xl font-bold text-grippy-black">
+            Calibrate the photo
+          </h2>
+          <p className="font-mono text-sm text-grippy-black/50">
+            Tap the left then right edge of your reference object.
+          </p>
+        </div>
+
+        {chipRow}
+
+        <div className="flex flex-col gap-2 px-2">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
+            What reference object did you use?
+          </p>
+          <div className="flex gap-2">
+            {REF_OBJECTS.map((obj, i) => (
+              <button
+                key={obj.label}
+                onClick={() => setRefIdx(i)}
+                className={[
+                  "px-3 py-1.5 rounded-full font-mono text-[10px] border transition-all",
+                  i === refIdx
+                    ? "bg-grippy-black text-grippy-cream border-grippy-black"
+                    : "bg-transparent text-grippy-black/50 border-grippy-black/20 active:border-grippy-black",
+                ].join(" ")}
+              >
+                {obj.label}
+              </button>
+            ))}
+          </div>
+          <p className="font-mono text-[10px] text-grippy-black/30">
+            {REF_OBJECTS[refIdx].mm} mm assumed width
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between px-2">
+          <span className="font-mono text-[11px] text-grippy-black/50">
+            Tap the outer edges of the {REF_OBJECTS[refIdx].label.toLowerCase()}
+          </span>
+          <button
+            onClick={handleRetake}
+            className="font-mono text-[11px] text-grippy-black/40 underline underline-offset-2 active:text-grippy-black"
+          >
+            Retake photo
+          </button>
+        </div>
+
+        <MeasurementCanvas
+          key={`cal-${currentFinger}-${photoUrl}`}
+          imageUrl={photoUrl!}
+          prompt={`Tap both edges of the ${REF_OBJECTS[refIdx].label.toLowerCase()}`}
+          onMeasure={handleCalibrate}
+        />
+      </div>
+    );
+  }
+
+  // ── Phase: measure ────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-5 px-4 pt-4">
       <div className="px-2 space-y-2">
         <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
-          Step 5 of 5 · {remaining} nail{remaining !== 1 ? "s" : ""} left
+          Finger {currentFinger + 1} of 5 · {label}
         </p>
         <h2 className="font-unbounded text-xl font-bold text-grippy-black">
-          Measure your nails
+          Measure your {label}
         </h2>
       </div>
 
@@ -380,10 +409,10 @@ function MeasureStep({
 
       <div className="flex items-center justify-between px-2">
         <span className="font-mono text-[11px] text-grippy-black/50">
-          Measuring: <span className="text-grippy-black font-medium">{label}</span>
+          Tap both edges of your <span className="text-grippy-black font-medium">{label} nail</span>
         </span>
         <button
-          onClick={() => setPhotoUrl(null)}
+          onClick={handleRetake}
           className="font-mono text-[11px] text-grippy-black/40 underline underline-offset-2 active:text-grippy-black"
         >
           Retake photo
@@ -391,9 +420,9 @@ function MeasureStep({
       </div>
 
       <MeasurementCanvas
-        key={`${currentFinger}-${photoUrl}`}
-        imageUrl={photoUrl}
-        prompt={`Tap both edges of your ${label}`}
+        key={`measure-${currentFinger}-${photoUrl}`}
+        imageUrl={photoUrl!}
+        prompt={`Tap both edges of your ${label} nail`}
         onMeasure={(dist, l, r) => onMeasure(currentFinger, dist, l, r)}
         lineColor="#0D0D0D"
       />
@@ -401,7 +430,7 @@ function MeasureStep({
   );
 }
 
-// ── Main Size page ───────────────────────────────────────────────────────────
+// ── Main Size page ────────────────────────────────────────────────────────────
 export default function Size() {
   const navigate = useNavigate();
   const {
@@ -409,9 +438,8 @@ export default function Size() {
     setStep,
     setHand,
     setShape,
-    setImage,
-    setCalibration,
     setFingerImage,
+    setFingerCalibration,
     recordMeasurement,
     undoMeasurement,
     getMeasurementArray,
@@ -419,11 +447,15 @@ export default function Size() {
 
   const goBack = () => {
     if (state.step === 0) return;
+    if (state.step >= 3) {
+      if (state.currentFinger === 0) {
+        setStep(2);
+      } else {
+        undoMeasurement();
+      }
+      return;
+    }
     setStep(state.step - 1);
-  };
-
-  const handleNailMeasured = (fingerIdx: number, distPx: number, left: Point, right: Point) => {
-    recordMeasurement(fingerIdx, distPx, left, right);
   };
 
   useEffect(() => {
@@ -438,6 +470,8 @@ export default function Size() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.step, state.measurements]);
+
+  const progressStep = state.step < 3 ? state.step : 2 + state.currentFinger + 1;
 
   return (
     <div className="min-h-screen grippy-surface flex flex-col">
@@ -456,9 +490,9 @@ export default function Size() {
         </div>
       )}
 
-      {state.step > 0 && state.step < TOTAL_STEPS && (
+      {state.step > 0 && state.step < 6 && (
         <div className="px-0 pt-2 pb-4">
-          <ProgressBar current={state.step} total={TOTAL_STEPS} />
+          <ProgressBar current={progressStep} total={PROGRESS_TOTAL} />
         </div>
       )}
 
@@ -480,30 +514,16 @@ export default function Size() {
             </PageContainer>
           )}
           {state.step === 3 && (
-            <PageContainer key="cal-photo" stepKey="cal-photo">
-              <CalibrationPhotoStep
-                preview={state.imageUrl}
-                onFile={setImage}
-                onNext={() => setStep(4)}
-              />
-            </PageContainer>
-          )}
-          {state.step === 4 && state.imageUrl && (
-            <PageContainer key="calibrate" stepKey="calibrate">
-              <CalibrationStep
-                imageUrl={state.imageUrl}
-                onDone={(_dist, l, r) => setCalibration(l, r)}
-              />
-            </PageContainer>
-          )}
-          {state.step === 5 && (
-            <PageContainer key={`measure-${state.currentFinger}`} stepKey={`measure-${state.currentFinger}`}>
+            <PageContainer key={`finger-${state.currentFinger}`} stepKey={`finger-${state.currentFinger}`}>
               <MeasureStep
+                key={`measure-${state.currentFinger}`}
                 currentFinger={state.currentFinger}
                 fingerImages={state.fingerImages}
+                fingerCalibrations={state.fingerCalibrations}
                 measurementPoints={state.measurementPoints}
                 onSetFingerImage={setFingerImage}
-                onMeasure={handleNailMeasured}
+                onCalibrate={setFingerCalibration}
+                onMeasure={recordMeasurement}
                 onUndo={undoMeasurement}
               />
             </PageContainer>
