@@ -9,17 +9,17 @@ export interface CalibrationData {
   pixelsPerMm: number;
 }
 
-export type MeasurementMap = Partial<Record<FingerName, number>>;
+export type MeasurementMap       = Partial<Record<FingerName, number>>;
 export type MeasurementPointsMap = Partial<Record<FingerName, { left: Point; right: Point }>>;
-export type FingerImagesMap = Partial<Record<FingerName, string>>;
+export type FingerImagesMap      = Partial<Record<FingerName, string>>;
+export type FingerCalibrationsMap = Partial<Record<FingerName, CalibrationData>>;
 
 export interface SizingState {
   step: number;
   hand: "left" | "right" | null;
   shape: NailShape | null;
-  imageFile: File | null;
-  imageUrl: string | null;
-  calibration: CalibrationData | null;
+  calibration: CalibrationData | null;         // active calibration (set per-finger photo)
+  fingerCalibrations: FingerCalibrationsMap;   // persisted per-finger so undo restores it
   measurements: MeasurementMap;
   measurementPoints: MeasurementPointsMap;
   fingerImages: FingerImagesMap;
@@ -30,9 +30,8 @@ const initialState: SizingState = {
   step: 0,
   hand: null,
   shape: null,
-  imageFile: null,
-  imageUrl: null,
   calibration: null,
+  fingerCalibrations: {},
   measurements: {},
   measurementPoints: {},
   fingerImages: {},
@@ -54,19 +53,20 @@ export function useSizing() {
     setState(s => ({ ...s, shape, step: 3 }));
   }, []);
 
-  const setImage = useCallback((file: File) => {
-    const url = URL.createObjectURL(file);
-    setState(s => ({ ...s, imageFile: file, imageUrl: url }));
-  }, []);
-
-  const setCalibration = useCallback((left: Point, right: Point) => {
-    const pixelWidth = Math.abs(right.x - left.x);
-    const pixelsPerMm = pixelWidth > 0 ? pixelWidth / 20 : 5;
-    setState(s => ({ ...s, calibration: { left, right, pixelsPerMm }, step: 5 }));
-  }, []);
-
   const setFingerImage = useCallback((finger: FingerName, url: string) => {
     setState(s => ({ ...s, fingerImages: { ...s.fingerImages, [finger]: url } }));
+  }, []);
+
+  // Store calibration for a specific finger and set it as the active calibration
+  const setFingerCalibration = useCallback((finger: FingerName, left: Point, right: Point, referenceMm = 20) => {
+    const pixelWidth   = Math.abs(right.x - left.x);
+    const pixelsPerMm  = pixelWidth > 0 ? pixelWidth / referenceMm : 5;
+    const cal: CalibrationData = { left, right, pixelsPerMm };
+    setState(s => ({
+      ...s,
+      calibration: cal,
+      fingerCalibrations: { ...s.fingerCalibrations, [finger]: cal },
+    }));
   }, []);
 
   const recordMeasurement = useCallback((
@@ -78,35 +78,41 @@ export function useSizing() {
     const finger = fingerOrder[fingerIndex];
     setState(s => {
       const pixelsPerMm = s.calibration?.pixelsPerMm ?? 5;
-      const widthMm = pixelsToMm(widthPx, pixelsPerMm);
-      const next: MeasurementMap = { ...s.measurements, [finger]: widthMm };
-      const nextPoints: MeasurementPointsMap = { ...s.measurementPoints, [finger]: { left, right } };
-      const allDone = fingerOrder.every(f => next[f] !== undefined);
+      const widthMm     = pixelsToMm(widthPx, pixelsPerMm);
+      const next        = { ...s.measurements,      [finger]: widthMm };
+      const nextPoints  = { ...s.measurementPoints, [finger]: { left, right } };
+      const allDone     = fingerOrder.every(f => next[f] !== undefined);
       return {
         ...s,
-        measurements: next,
+        measurements:      next,
         measurementPoints: nextPoints,
-        currentFinger: allDone ? fingerIndex : fingerIndex + 1,
-        step: allDone ? 6 : 5,
+        currentFinger:     allDone ? fingerIndex : fingerIndex + 1,
+        step:              allDone ? 6 : 3,
       };
     });
   }, []);
 
   const undoMeasurement = useCallback(() => {
     setState(s => {
-      const idx = Math.max(0, s.currentFinger - 1);
+      const idx    = Math.max(0, s.currentFinger - 1);
       const finger = fingerOrder[idx];
-      const next = { ...s.measurements };
-      const nextPoints = { ...s.measurementPoints };
+      const next        = { ...s.measurements };
+      const nextPoints  = { ...s.measurementPoints };
       delete next[finger];
       delete nextPoints[finger];
-      return { ...s, measurements: next, measurementPoints: nextPoints, currentFinger: idx };
+      // Restore the calibration that was used for this finger's photo
+      const restoredCal = s.fingerCalibrations[finger] ?? null;
+      return {
+        ...s,
+        measurements:      next,
+        measurementPoints: nextPoints,
+        currentFinger:     idx,
+        calibration:       restoredCal,
+      };
     });
   }, []);
 
-  const reset = useCallback(() => {
-    setState(initialState);
-  }, []);
+  const reset = useCallback(() => setState(initialState), []);
 
   const getMeasurementArray = useCallback((s: SizingState): number[] => {
     return fingerOrder.map(f => s.measurements[f] ?? 0);
@@ -117,9 +123,8 @@ export function useSizing() {
     setStep,
     setHand,
     setShape,
-    setImage,
-    setCalibration,
     setFingerImage,
+    setFingerCalibration,
     recordMeasurement,
     undoMeasurement,
     getMeasurementArray,

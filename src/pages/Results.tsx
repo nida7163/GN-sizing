@@ -6,7 +6,6 @@ import { ResultCard } from "@/components/grippy/ResultCard";
 import { GrippyButton } from "@/components/grippy/Button";
 import { AuthModal } from "@/components/grippy/AuthModal";
 import { SizeKey, NailShape, shapeLabels } from "@/lib/sizeChart";
-import { MeasurementMap } from "@/hooks/use-sizing";
 import { useAuth } from "@/hooks/use-auth";
 import { saveSizingSession, fetchHistory, HistorySession } from "@/lib/grippy-supabase";
 
@@ -136,7 +135,6 @@ export default function Results() {
         <ResultCard
           size={result.size}
           confidence={result.confidence}
-          measurements={result.measurements}
         />
 
         {/* Sizing notes */}
