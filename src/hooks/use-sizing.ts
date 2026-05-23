@@ -120,6 +120,22 @@ export function useSizing() {
     return fingerOrder.map(f => s.measurements[f] ?? 0);
   }, []);
 
+  const restoreForRetake = useCallback((
+    hand: "left" | "right",
+    shape: NailShape,
+    measurements: MeasurementMap,
+    fingerIdx: number,
+  ) => {
+    setState({
+      ...initialState,
+      step: 3,
+      hand,
+      shape,
+      measurements,
+      currentFinger: fingerIdx,
+    });
+  }, []);
+
   return {
     state,
     setStep,
@@ -131,5 +147,6 @@ export function useSizing() {
     undoMeasurement,
     getMeasurementArray,
     reset,
+    restoreForRetake,
   };
 }

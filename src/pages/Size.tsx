@@ -8,7 +8,7 @@ import { UploadCard } from "@/components/grippy/UploadCard";
 import { MeasurementCanvas } from "@/components/grippy/MeasurementCanvas";
 import { PageContainer } from "@/components/grippy/PageContainer";
 import { useSizing } from "@/hooks/use-sizing";
-import type { Point, MeasurementPointsMap, FingerImagesMap, FingerCalibrationsMap } from "@/hooks/use-sizing";
+import type { Point, MeasurementPointsMap, FingerImagesMap, FingerCalibrationsMap, MeasurementMap } from "@/hooks/use-sizing";
 import { fingerOrder, fingerLabels, getClosestSize, NailShape } from "@/lib/sizeChart";
 import type { FingerName } from "@/lib/sizeChart";
 
@@ -174,6 +174,7 @@ function MeasureStep({
   fingerImages,
   fingerCalibrations,
   measurementPoints,
+  measurements,
   onSetFingerImage,
   onCalibrate,
   onMeasure,
@@ -183,6 +184,7 @@ function MeasureStep({
   fingerImages: FingerImagesMap;
   fingerCalibrations: FingerCalibrationsMap;
   measurementPoints: MeasurementPointsMap;
+  measurements: MeasurementMap;
   onSetFingerImage: (finger: FingerName, url: string) => void;
   onCalibrate: (finger: FingerName, left: Point, right: Point, referenceMm?: number) => void;
   onMeasure: (fingerIdx: number, distPx: number, left: Point, right: Point) => void;
@@ -197,9 +199,11 @@ function MeasureStep({
     return "measure";
   });
 
-  const [photoUrl,  setPhotoUrl]  = useState<string | null>(fingerImages[finger] ?? null);
-  const [refIdx,    setRefIdx]    = useState(1); // default: Quarter
-  const [reviewIdx, setReviewIdx] = useState<number | null>(null);
+  const [photoUrl,    setPhotoUrl]    = useState<string | null>(fingerImages[finger] ?? null);
+  const [refIdx,      setRefIdx]      = useState(1); // default: Quarter
+  const [reviewIdx,   setReviewIdx]   = useState<number | null>(null);
+  const [canvasKey,   setCanvasKey]   = useState(0);
+  const [measureWarn, setMeasureWarn] = useState<{ mm: number; dist: number; left: Point; right: Point } | null>(null);
 
   const handlePhoto = (file: File) => {
     const url = URL.createObjectURL(file);
@@ -213,9 +217,20 @@ function MeasureStep({
     setPhase("measure");
   };
 
-  const handleRetake = () => {
+  const handleRetakePhoto = () => {
     setPhotoUrl(null);
+    setMeasureWarn(null);
     setPhase("photo");
+  };
+
+  const handleMeasureAttempt = (dist: number, left: Point, right: Point) => {
+    const ppm     = fingerCalibrations[finger]?.pixelsPerMm ?? 5;
+    const widthMm = Math.abs(right.x - left.x) / ppm;
+    if (widthMm < 5 || widthMm > 25) {
+      setMeasureWarn({ mm: widthMm, dist, left, right });
+    } else {
+      onMeasure(currentFinger, dist, left, right);
+    }
   };
 
   const handleChipClick = (i: number) => {
@@ -228,7 +243,7 @@ function MeasureStep({
     <div className="flex items-center gap-2 px-2">
       <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1">
         {fingerOrder.map((f, i) => {
-          const done      = i < currentFinger;
+          const done      = measurements[f] !== undefined;
           const active    = i === currentFinger;
           const reviewing = reviewIdx === i;
           return (
@@ -256,7 +271,7 @@ function MeasureStep({
           className="shrink-0 flex items-center gap-1 font-mono text-[10px] text-grippy-black/50 active:text-grippy-black transition-colors border border-grippy-black/15 rounded-full px-2.5 py-1.5"
         >
           <Undo2 size={11} />
-          Redo {fingerLabels[fingerOrder[currentFinger - 1]]}
+          Redo {fingerLabels[finger]}
         </button>
       )}
     </div>
@@ -375,7 +390,7 @@ function MeasureStep({
             Tap the outer edges of the {REF_OBJECTS[refIdx].label.toLowerCase()}
           </span>
           <button
-            onClick={handleRetake}
+            onClick={handleRetakePhoto}
             className="font-mono text-[11px] text-grippy-black/40 underline underline-offset-2 active:text-grippy-black"
           >
             Retake photo
@@ -412,7 +427,7 @@ function MeasureStep({
           Tap the <span className="text-grippy-black font-medium">widest point</span> near the base of your {label} nail
         </span>
         <button
-          onClick={handleRetake}
+          onClick={handleRetakePhoto}
           className="font-mono text-[11px] text-grippy-black/40 underline underline-offset-2 active:text-grippy-black"
         >
           Retake photo
@@ -420,12 +435,41 @@ function MeasureStep({
       </div>
 
       <MeasurementCanvas
-        key={`measure-${currentFinger}-${photoUrl}`}
+        key={`measure-${currentFinger}-${photoUrl}-${canvasKey}`}
         imageUrl={photoUrl!}
         prompt={`Tap the widest part of your ${label} nail (near base)`}
-        onMeasure={(dist, l, r) => onMeasure(currentFinger, dist, l, r)}
+        onMeasure={handleMeasureAttempt}
         lineColor="#0D0D0D"
       />
+
+      <AnimatePresence>
+        {measureWarn && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="mx-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 space-y-3"
+          >
+            <p className="font-mono text-xs text-amber-800 leading-relaxed">
+              That measures {measureWarn.mm.toFixed(1)} mm — typical nails are 8–20 mm wide. Did you tap the right spots?
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setMeasureWarn(null); setCanvasKey(k => k + 1); }}
+                className="flex-1 py-2 rounded-xl bg-amber-100 font-mono text-xs text-amber-800 font-medium active:bg-amber-200 transition-colors"
+              >
+                Try Again
+              </button>
+              <button
+                onClick={() => { onMeasure(currentFinger, measureWarn.dist, measureWarn.left, measureWarn.right); setMeasureWarn(null); }}
+                className="flex-1 py-2 rounded-xl bg-grippy-black/5 font-mono text-xs text-grippy-black/60 active:bg-grippy-black/10 transition-colors"
+              >
+                Accept Anyway
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -443,7 +487,19 @@ export default function Size() {
     recordMeasurement,
     undoMeasurement,
     getMeasurementArray,
+    restoreForRetake,
   } = useSizing();
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("grippy_retake");
+    if (!raw) return;
+    sessionStorage.removeItem("grippy_retake");
+    try {
+      const { hand, shape, measurements, fingerIdx } = JSON.parse(raw);
+      restoreForRetake(hand, shape, measurements, fingerIdx);
+    } catch { /* ignore malformed data */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const goBack = () => {
     if (state.step === 0) return;
@@ -521,6 +577,7 @@ export default function Size() {
                 fingerImages={state.fingerImages}
                 fingerCalibrations={state.fingerCalibrations}
                 measurementPoints={state.measurementPoints}
+                measurements={state.measurements}
                 onSetFingerImage={setFingerImage}
                 onCalibrate={setFingerCalibration}
                 onMeasure={recordMeasurement}

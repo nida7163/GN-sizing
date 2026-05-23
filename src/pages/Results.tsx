@@ -5,6 +5,7 @@ import { ArrowLeft, ShoppingBag, Share2 } from "lucide-react";
 import { ResultCard } from "@/components/grippy/ResultCard";
 import { GrippyButton } from "@/components/grippy/Button";
 import { SizeKey, NailShape, shapeLabels, fingerOrder, fingerLabels, sizeCharts } from "@/lib/sizeChart";
+import type { FingerName } from "@/lib/sizeChart";
 import type { MeasurementMap } from "@/hooks/use-sizing";
 
 interface GrippyResult {
@@ -28,6 +29,20 @@ export default function Results() {
       navigate("/size");
     }
   }, [navigate]);
+
+  const handleRetake = (finger: FingerName) => {
+    if (!result) return;
+    const fingerIdx   = fingerOrder.indexOf(finger);
+    const measurements = { ...result.measurements };
+    delete measurements[finger];
+    sessionStorage.setItem("grippy_retake", JSON.stringify({
+      hand: result.hand,
+      shape: result.shape,
+      measurements,
+      fingerIdx,
+    }));
+    navigate("/size");
+  };
 
   const handleShare = async () => {
     if (!result) return;
@@ -82,30 +97,41 @@ export default function Results() {
           <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40 mb-3">
             Your measurements vs size {result.size}
           </p>
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {fingerOrder.map((finger, i) => {
               const measured = result.measurements[finger];
               const target   = chartSizes[i];
               const diff     = measured !== undefined ? measured - target : null;
+              const isRed    = diff !== null && Math.abs(diff) > 1.5;
               return (
-                <div key={finger} className="flex items-center justify-between">
-                  <span className="font-mono text-xs text-grippy-black/60 w-14">{fingerLabels[finger]}</span>
-                  <div className="flex-1 mx-3 h-1 bg-grippy-black/8 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-grippy-cobalt rounded-full"
-                      style={{ width: measured !== undefined ? `${Math.min(100, (measured / 20) * 100)}%` : "0%" }}
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 text-right">
-                    <span className="font-mono text-xs text-grippy-black tabular-nums w-12">
-                      {measured !== undefined ? `${measured} mm` : "—"}
-                    </span>
-                    {diff !== null && (
-                      <span className={`font-mono text-[10px] tabular-nums w-10 ${Math.abs(diff) <= 0.5 ? "text-emerald-500" : Math.abs(diff) <= 1.5 ? "text-amber-500" : "text-rose-500"}`}>
-                        {diff > 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1)}
+                <div key={finger} className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs text-grippy-black/60 w-14">{fingerLabels[finger]}</span>
+                    <div className="flex-1 mx-3 h-1 bg-grippy-black/8 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-grippy-cobalt rounded-full"
+                        style={{ width: measured !== undefined ? `${Math.min(100, (measured / 20) * 100)}%` : "0%" }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 text-right">
+                      <span className="font-mono text-xs text-grippy-black tabular-nums w-12">
+                        {measured !== undefined ? `${measured} mm` : "—"}
                       </span>
-                    )}
+                      {diff !== null && (
+                        <span className={`font-mono text-[10px] tabular-nums w-10 ${Math.abs(diff) <= 0.5 ? "text-emerald-500" : Math.abs(diff) <= 1.5 ? "text-amber-500" : "text-rose-500"}`}>
+                          {diff > 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
                   </div>
+                  {isRed && (
+                    <button
+                      onClick={() => handleRetake(finger)}
+                      className="ml-14 font-mono text-[10px] text-rose-500 underline underline-offset-2 active:text-rose-700 transition-colors"
+                    >
+                      Retake {fingerLabels[finger]} →
+                    </button>
+                  )}
                 </div>
               );
             })}
