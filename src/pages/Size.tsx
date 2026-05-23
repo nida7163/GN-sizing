@@ -14,6 +14,28 @@ import type { FingerName, SizeKey } from "@/lib/sizeChart";
 
 const PROGRESS_TOTAL = 8; // 0=Landing, 1=Hand, 2=Shape, 3–7=Thumb–Pinky
 
+// Demo measurements: between S and M → triggers sized-up nudge, amber diffs visible
+const DEMO_MEASUREMENTS: MeasurementMap = {
+  thumb:  15.3,
+  index:  11.6,
+  middle: 12.4,
+  ring:   11.5,
+  pinky:   9.2,
+};
+
+function launchDemo(navigate: ReturnType<typeof useNavigate>) {
+  const arr    = fingerOrder.map(f => DEMO_MEASUREMENTS[f] ?? 0);
+  const result = getClosestSize(arr, "short-round");
+  sessionStorage.setItem("grippy_result", JSON.stringify({
+    ...result,
+    measurements: DEMO_MEASUREMENTS,
+    hand:         "right",
+    shape:        "short-round",
+    isGiftMode:   false,
+  }));
+  navigate("/results");
+}
+
 const REF_OBJECTS = [
   { label: "Penny / Dime", mm: 19 },
   { label: "Quarter",      mm: 24 },
@@ -106,6 +128,7 @@ function LandingStep({
   resumeLabel,
   onContinue,
   onStartOver,
+  onDemo,
 }: {
   onStart: () => void;
   isGiftMode: boolean;
@@ -113,6 +136,7 @@ function LandingStep({
   resumeLabel: string;
   onContinue: () => void;
   onStartOver: () => void;
+  onDemo: () => void;
 }) {
   const [showGiftShare, setShowGiftShare] = useState(false);
   const [copied,        setCopied]        = useState(false);
@@ -214,6 +238,14 @@ function LandingStep({
         ) : (
           <GrippyButton size="lg" fullWidth onClick={onStart}>Start Sizing</GrippyButton>
         )}
+
+        {/* Demo shortcut — skip photo flow for testing */}
+        <button
+          onClick={onDemo}
+          className="font-mono text-[10px] text-grippy-black/20 active:text-grippy-black/40 transition-colors"
+        >
+          Demo mode
+        </button>
 
         {/* Gift mode trigger */}
         <AnimatePresence mode="wait">
@@ -812,6 +844,11 @@ export default function Size() {
   const resumeLabel      = getResumeLabel(state);
 
   useEffect(() => {
+    // Demo mode via URL param — skip the photo flow entirely
+    if (searchParams.get("demo") === "1") {
+      launchDemo(navigate);
+      return;
+    }
     const raw = sessionStorage.getItem("grippy_retake");
     if (!raw) return;
     sessionStorage.removeItem("grippy_retake");
@@ -891,6 +928,7 @@ export default function Size() {
                 resumeLabel={resumeLabel}
                 onContinue={resume}
                 onStartOver={reset}
+                onDemo={() => launchDemo(navigate)}
               />
             </PageContainer>
           )}
