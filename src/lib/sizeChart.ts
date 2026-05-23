@@ -46,7 +46,7 @@ const SIZE_ORDER: SizeKey[] = ["XS", "S", "M", "L"];
 export function getClosestSize(
   measurements: number[],
   shape: NailShape = "short-round"
-): { size: SizeKey; confidence: number } {
+): { size: SizeKey; confidence: number; sizedUp: boolean; originalSize: SizeKey } {
   const chart = sizeCharts[shape];
 
   // Compute distance to each size
@@ -62,16 +62,20 @@ export function getClosestSize(
   // If the two closest sizes are within 1mm of each other, size up for comfort
   // (press-ons can be filed down but not enlarged)
   let chosenSize = best.size;
+  let sizedUp    = false;
   if (second.distance - best.distance < 1.0) {
     const bestIdx   = SIZE_ORDER.indexOf(best.size);
     const secondIdx = SIZE_ORDER.indexOf(second.size);
-    if (secondIdx > bestIdx) chosenSize = second.size;
+    if (secondIdx > bestIdx) {
+      chosenSize = second.size;
+      sizedUp    = true;
+    }
   }
 
   const maxDist  = 12;
   const confidence = Math.max(40, Math.round((1 - Math.min(best.distance, maxDist) / maxDist) * 100));
 
-  return { size: chosenSize, confidence };
+  return { size: chosenSize, confidence, sizedUp, originalSize: best.size };
 }
 
 export const PIXELS_PER_MM = 5;

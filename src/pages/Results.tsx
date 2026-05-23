@@ -11,6 +11,8 @@ import type { MeasurementMap } from "@/hooks/use-sizing";
 interface GrippyResult {
   size: SizeKey;
   confidence: number;
+  sizedUp?: boolean;
+  originalSize?: SizeKey;
   measurements: MeasurementMap;
   hand: "left" | "right";
   shape: NailShape;
@@ -88,6 +90,26 @@ export default function Results() {
         </motion.div>
 
         <ResultCard size={result.size} confidence={result.confidence} />
+
+        {/* Confidence nudge */}
+        {result.sizedUp && result.originalSize && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="flex items-start gap-3 bg-grippy-black text-grippy-cream rounded-2xl px-5 py-4"
+          >
+            <span className="text-base mt-0.5 shrink-0">↑</span>
+            <div className="space-y-1">
+              <p className="font-unbounded text-xs font-bold text-grippy-cream">
+                You're between {result.originalSize} and {result.size}
+              </p>
+              <p className="font-mono text-[11px] text-grippy-cream/70 leading-relaxed">
+                We sized you up — press-ons can always be filed down for a perfect fit, but they can't be enlarged.
+              </p>
+            </div>
+          </motion.div>
+        )}
 
         {/* Per-finger breakdown */}
         <motion.div

@@ -557,10 +557,10 @@ export default function Size() {
   useEffect(() => {
     if (state.step === 6 && Object.keys(state.measurements).length === fingerOrder.length) {
       const arr = getMeasurementArray(state);
-      const { size, confidence } = getClosestSize(arr, state.shape ?? "short-round");
+      const { size, confidence, sizedUp, originalSize } = getClosestSize(arr, state.shape ?? "short-round");
       sessionStorage.setItem(
         "grippy_result",
-        JSON.stringify({ size, confidence, measurements: state.measurements, hand: state.hand, shape: state.shape })
+        JSON.stringify({ size, confidence, sizedUp, originalSize, measurements: state.measurements, hand: state.hand, shape: state.shape })
       );
       navigate("/results");
     }
