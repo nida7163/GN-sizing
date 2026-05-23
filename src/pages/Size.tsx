@@ -409,7 +409,7 @@ function MeasureStep({
 
       <div className="flex items-center justify-between px-2">
         <span className="font-mono text-[11px] text-grippy-black/50">
-          Tap both edges of your <span className="text-grippy-black font-medium">{label} nail</span>
+          Tap the <span className="text-grippy-black font-medium">widest point</span> near the base of your {label} nail
         </span>
         <button
           onClick={handleRetake}
@@ -422,7 +422,7 @@ function MeasureStep({
       <MeasurementCanvas
         key={`measure-${currentFinger}-${photoUrl}`}
         imageUrl={photoUrl!}
-        prompt={`Tap both edges of your ${label} nail`}
+        prompt={`Tap the widest part of your ${label} nail (near base)`}
         onMeasure={(dist, l, r) => onMeasure(currentFinger, dist, l, r)}
         lineColor="#0D0D0D"
       />

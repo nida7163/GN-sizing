@@ -41,28 +41,37 @@ export interface SizeResult {
   individualWidths: Record<FingerName, number>;
 }
 
+const SIZE_ORDER: SizeKey[] = ["XS", "S", "M", "L"];
+
 export function getClosestSize(
   measurements: number[],
   shape: NailShape = "short-round"
 ): { size: SizeKey; confidence: number } {
   const chart = sizeCharts[shape];
-  let bestSize: SizeKey = "M";
-  let bestDistance = Infinity;
 
-  for (const [size, widths] of Object.entries(chart) as [SizeKey, readonly number[]][]) {
-    const distance = Math.sqrt(
-      measurements.reduce((sum, m, i) => sum + Math.pow(m - widths[i], 2), 0)
-    );
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestSize = size;
-    }
+  // Compute distance to each size
+  const distances = (Object.entries(chart) as [SizeKey, readonly number[]][]).map(([size, widths]) => ({
+    size,
+    distance: Math.sqrt(measurements.reduce((sum, m, i) => sum + Math.pow(m - widths[i], 2), 0)),
+  }));
+
+  distances.sort((a, b) => a.distance - b.distance);
+  const best   = distances[0];
+  const second = distances[1];
+
+  // If the two closest sizes are within 1mm of each other, size up for comfort
+  // (press-ons can be filed down but not enlarged)
+  let chosenSize = best.size;
+  if (second.distance - best.distance < 1.0) {
+    const bestIdx   = SIZE_ORDER.indexOf(best.size);
+    const secondIdx = SIZE_ORDER.indexOf(second.size);
+    if (secondIdx > bestIdx) chosenSize = second.size;
   }
 
-  const maxDist = 12;
-  const confidence = Math.max(40, Math.round((1 - Math.min(bestDistance, maxDist) / maxDist) * 100));
+  const maxDist  = 12;
+  const confidence = Math.max(40, Math.round((1 - Math.min(best.distance, maxDist) / maxDist) * 100));
 
-  return { size: bestSize, confidence };
+  return { size: chosenSize, confidence };
 }
 
 export const PIXELS_PER_MM = 5;

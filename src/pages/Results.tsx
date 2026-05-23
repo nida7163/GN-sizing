@@ -4,11 +4,13 @@ import { motion } from "framer-motion";
 import { ArrowLeft, ShoppingBag, Share2 } from "lucide-react";
 import { ResultCard } from "@/components/grippy/ResultCard";
 import { GrippyButton } from "@/components/grippy/Button";
-import { SizeKey, NailShape, shapeLabels } from "@/lib/sizeChart";
+import { SizeKey, NailShape, shapeLabels, fingerOrder, fingerLabels, sizeCharts } from "@/lib/sizeChart";
+import type { MeasurementMap } from "@/hooks/use-sizing";
 
 interface GrippyResult {
   size: SizeKey;
   confidence: number;
+  measurements: MeasurementMap;
   hand: "left" | "right";
   shape: NailShape;
 }
@@ -20,11 +22,8 @@ export default function Results() {
   useEffect(() => {
     const raw = sessionStorage.getItem("grippy_result");
     if (raw) {
-      try {
-        setResult(JSON.parse(raw));
-      } catch {
-        navigate("/size");
-      }
+      try { setResult(JSON.parse(raw)); }
+      catch { navigate("/size"); }
     } else {
       navigate("/size");
     }
@@ -34,16 +33,14 @@ export default function Results() {
     if (!result) return;
     const shapeName = shapeLabels[result.shape] ?? result.shape;
     const text = `My Grippy nail size is ${result.size} in ${shapeName}! Find yours at grippynails.com`;
-    if (navigator.share) {
-      await navigator.share({ text });
-    } else {
-      await navigator.clipboard.writeText(text);
-    }
+    if (navigator.share) await navigator.share({ text });
+    else await navigator.clipboard.writeText(text);
   };
 
   if (!result) return null;
 
-  const shapeName = shapeLabels[result.shape] ?? result.shape;
+  const shapeName  = shapeLabels[result.shape] ?? result.shape;
+  const chartSizes = sizeCharts[result.shape][result.size];
 
   return (
     <div className="min-h-screen grippy-surface flex flex-col">
@@ -56,23 +53,15 @@ export default function Results() {
           <ArrowLeft size={16} />
           Resize
         </button>
-        <span className="font-unbounded text-xs font-black text-grippy-cobalt tracking-tight">
-          GRIPPY
-        </span>
-        <button
-          onClick={handleShare}
-          className="text-grippy-black/50 active:text-grippy-black transition-colors"
-        >
+        <span className="font-unbounded text-xs font-black text-grippy-cobalt tracking-tight">GRIPPY</span>
+        <button onClick={handleShare} className="text-grippy-black/50 active:text-grippy-black transition-colors">
           <Share2 size={18} />
         </button>
       </div>
 
-      {/* Content */}
       <div className="flex-1 flex flex-col gap-5 px-5 pt-4 pb-10">
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
           className="space-y-1"
         >
           <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
@@ -85,20 +74,58 @@ export default function Results() {
 
         <ResultCard size={result.size} confidence={result.confidence} />
 
+        {/* Per-finger breakdown */}
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          className="bg-grippy-black/5 rounded-2xl px-5 py-4"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
+          className="border border-grippy-black/10 rounded-2xl px-5 py-4"
         >
-          <p className="font-mono text-xs text-grippy-black/60 leading-relaxed">
-            Sizes are based on nail width measurements. If you're between sizes, we recommend sizing up for a comfortable fit. All Grippy sets include a nail file for customisation.
+          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40 mb-3">
+            Your measurements vs size {result.size}
+          </p>
+          <div className="space-y-2.5">
+            {fingerOrder.map((finger, i) => {
+              const measured = result.measurements[finger];
+              const target   = chartSizes[i];
+              const diff     = measured !== undefined ? measured - target : null;
+              return (
+                <div key={finger} className="flex items-center justify-between">
+                  <span className="font-mono text-xs text-grippy-black/60 w-14">{fingerLabels[finger]}</span>
+                  <div className="flex-1 mx-3 h-1 bg-grippy-black/8 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-grippy-cobalt rounded-full"
+                      style={{ width: measured !== undefined ? `${Math.min(100, (measured / 20) * 100)}%` : "0%" }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 text-right">
+                    <span className="font-mono text-xs text-grippy-black tabular-nums w-12">
+                      {measured !== undefined ? `${measured} mm` : "—"}
+                    </span>
+                    {diff !== null && (
+                      <span className={`font-mono text-[10px] tabular-nums w-10 ${Math.abs(diff) <= 0.5 ? "text-emerald-500" : Math.abs(diff) <= 1.5 ? "text-amber-500" : "text-rose-500"}`}>
+                        {diff > 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="font-mono text-[10px] text-grippy-black/30 mt-3">
+            Difference from size {result.size} target · green = within 0.5 mm
           </p>
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
+          className="bg-grippy-black/5 rounded-2xl px-5 py-4"
+        >
+          <p className="font-mono text-xs text-grippy-black/60 leading-relaxed">
+            When between sizes, we size up — press-ons can always be filed down for a perfect fit.
+          </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4, duration: 0.5 }}
           className="flex flex-col gap-3 mt-auto"
         >
