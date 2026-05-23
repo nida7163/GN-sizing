@@ -1,19 +1,18 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Hand, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Hand, Undo2 } from "lucide-react";
 import { GrippyButton } from "@/components/grippy/Button";
 import { ProgressBar } from "@/components/grippy/ProgressBar";
 import { UploadCard } from "@/components/grippy/UploadCard";
+import { MeasurementCanvas } from "@/components/grippy/MeasurementCanvas";
 import { PageContainer } from "@/components/grippy/PageContainer";
 import { useSizing } from "@/hooks/use-sizing";
-import type { Point, MeasurementPointsMap, FingerImagesMap } from "@/hooks/use-sizing";
+import type { Point, MeasurementPointsMap, FingerImagesMap, FingerCalibrationsMap } from "@/hooks/use-sizing";
 import { fingerOrder, fingerLabels, getClosestSize, NailShape } from "@/lib/sizeChart";
 import type { FingerName } from "@/lib/sizeChart";
-import { analyzeNailPhoto } from "@/lib/analyze-nail";
-import type { NailAnalysis } from "@/lib/analyze-nail";
 
-const PROGRESS_TOTAL = 8;
+const PROGRESS_TOTAL = 8; // 0=Landing, 1=Hand, 2=Shape, 3–7=Thumb–Pinky
 
 const REF_OBJECTS = [
   { label: "Penny / Dime", mm: 19 },
@@ -39,85 +38,7 @@ function NailShapeIcon({ shape }: { shape: NailShape }) {
   );
 }
 
-// ── Canvas helpers ────────────────────────────────────────────────────────────
-function dot(ctx: CanvasRenderingContext2D, x: number, y: number, color: string) {
-  ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2);
-  ctx.fillStyle = color; ctx.globalAlpha = 0.25; ctx.fill(); ctx.globalAlpha = 1;
-  ctx.beginPath(); ctx.arc(x, y, 5,  0, Math.PI * 2);
-  ctx.fillStyle = color; ctx.fill();
-}
-function line(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, color: string) {
-  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-  ctx.strokeStyle = color; ctx.lineWidth = 2.5;
-  ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
-}
-
-// ── Detection preview canvas ──────────────────────────────────────────────────
-function DetectionCanvas({
-  imageUrl,
-  analysis,
-  referenceMm,
-  onNaturalSize,
-}: {
-  imageUrl: string;
-  analysis: NailAnalysis;
-  referenceMm: number;
-  onNaturalSize: (w: number, h: number) => void;
-}) {
-  const canvasRef    = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas    = canvasRef.current;
-      const container = containerRef.current;
-      if (!canvas || !container) return;
-      const w = container.clientWidth;
-      const h = w * (img.naturalHeight / img.naturalWidth);
-      canvas.width  = w;
-      canvas.height = h;
-      onNaturalSize(img.naturalWidth, img.naturalHeight);
-
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0, w, h);
-
-      // Reference object line (blue)
-      const refLx = analysis.ref_left  * w;
-      const refRx = analysis.ref_right * w;
-      const refY  = h * 0.78;
-      line(ctx, refLx, refY, refRx, refY, "#3B82F6");
-      dot(ctx, refLx, refY, "#3B82F6");
-      dot(ctx, refRx, refY, "#3B82F6");
-      ctx.font = "bold 11px 'DM Mono', monospace";
-      ctx.fillStyle = "#3B82F6"; ctx.textAlign = "center";
-      ctx.fillText("ref", (refLx + refRx) / 2, refY - 12);
-
-      // Nail line (dark)
-      const nailLx = analysis.nail_left  * w;
-      const nailRx = analysis.nail_right * w;
-      const nailY  = analysis.nail_y     * h;
-      line(ctx, nailLx, nailY, nailRx, nailY, "#0D0D0D");
-      dot(ctx, nailLx, nailY, "#0D0D0D");
-      dot(ctx, nailRx, nailY, "#0D0D0D");
-
-      const nailMm = (analysis.nail_right - analysis.nail_left)
-                   / (analysis.ref_right  - analysis.ref_left)
-                   * referenceMm;
-      ctx.fillStyle = "#0D0D0D"; ctx.textAlign = "center";
-      ctx.fillText(`${nailMm.toFixed(1)} mm`, (nailLx + nailRx) / 2, nailY - 12);
-    };
-    img.src = imageUrl;
-  }, [imageUrl, analysis, referenceMm, onNaturalSize]);
-
-  return (
-    <div ref={containerRef} className="w-full rounded-2xl overflow-hidden bg-grippy-black shadow-xl">
-      <canvas ref={canvasRef} className="w-full" />
-    </div>
-  );
-}
-
-// ── Frozen canvas: static overlay for completed-finger review ─────────────────
+// ── Frozen canvas: static measurement overlay for review ─────────────────────
 function FrozenCanvas({ imageUrl, left, right }: { imageUrl: string; left: Point; right: Point }) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -128,14 +49,29 @@ function FrozenCanvas({ imageUrl, left, right }: { imageUrl: string; left: Point
       const canvas    = canvasRef.current;
       const container = containerRef.current;
       if (!canvas || !container) return;
-      const w = container.clientWidth;
-      canvas.width  = w;
-      canvas.height = w * (img.naturalHeight / img.naturalWidth);
+      const maxW    = container.clientWidth;
+      canvas.width  = maxW;
+      canvas.height = maxW * (img.naturalHeight / img.naturalWidth);
       const ctx = canvas.getContext("2d")!;
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      dot(ctx, left.x,  left.y,  "#0D0D0D");
-      dot(ctx, right.x, right.y, "#0D0D0D");
-      line(ctx, left.x, left.y, right.x, right.y, "#0D0D0D");
+      const drawMarker = (p: Point) => {
+        ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+        ctx.fillStyle = "#0D0D0D"; ctx.globalAlpha = 0.25; ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = "#0D0D0D"; ctx.fill();
+      };
+      drawMarker(left);
+      drawMarker(right);
+      ctx.beginPath(); ctx.moveTo(left.x, left.y); ctx.lineTo(right.x, right.y);
+      ctx.strokeStyle = "#0D0D0D"; ctx.lineWidth = 2.5;
+      ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.font = "bold 13px 'DM Mono', monospace";
+      ctx.fillStyle = "#0D0D0D"; ctx.textAlign = "center";
+      ctx.fillText(
+        `${Math.round(Math.hypot(right.x - left.x, right.y - left.y))}px`,
+        (left.x + right.x) / 2, (left.y + right.y) / 2 - 14,
+      );
     };
     img.src = imageUrl;
   }, [imageUrl, left, right]);
@@ -230,12 +166,13 @@ function ShapeStep({ onSelect }: { onSelect: (shape: NailShape) => void }) {
   );
 }
 
-// ── Step 3: Per-finger auto-detection flow ────────────────────────────────────
-type FingerPhase = "photo" | "analyzing" | "confirm" | "error";
+// ── Step 3: Per-finger photo → calibrate → measure ────────────────────────────
+type FingerPhase = "photo" | "calibrate" | "measure";
 
 function MeasureStep({
   currentFinger,
   fingerImages,
+  fingerCalibrations,
   measurementPoints,
   onSetFingerImage,
   onCalibrate,
@@ -244,6 +181,7 @@ function MeasureStep({
 }: {
   currentFinger: number;
   fingerImages: FingerImagesMap;
+  fingerCalibrations: FingerCalibrationsMap;
   measurementPoints: MeasurementPointsMap;
   onSetFingerImage: (finger: FingerName, url: string) => void;
   onCalibrate: (finger: FingerName, left: Point, right: Point, referenceMm?: number) => void;
@@ -253,76 +191,50 @@ function MeasureStep({
   const finger = fingerOrder[currentFinger];
   const label  = fingerLabels[finger];
 
-  const [phase,       setPhase]       = useState<FingerPhase>("photo");
-  const [photoUrl,    setPhotoUrl]    = useState<string | null>(null);
-  const [photoFile,   setPhotoFile]   = useState<File | null>(null);
-  const [refIdx,      setRefIdx]      = useState(1); // default: Quarter
-  const [analysis,    setAnalysis]    = useState<NailAnalysis | null>(null);
-  const [_errorMsg,   setErrorMsg]    = useState<string | null>(null);
-  const [naturalSize, setNaturalSize] = useState({ w: 1, h: 1 });
-  const [reviewIdx,   setReviewIdx]   = useState<number | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [phase, setPhase] = useState<FingerPhase>(() => {
+    if (!fingerImages[finger])       return "photo";
+    if (!fingerCalibrations[finger]) return "calibrate";
+    return "measure";
+  });
 
-  const runAnalysis = async (file: File) => {
-    setPhase("analyzing");
-    setErrorMsg(null);
-    try {
-      const result = await analyzeNailPhoto(file, REF_OBJECTS[refIdx].label);
-      setAnalysis(result);
-      setPhase("confirm");
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : String(err));
-      setPhase("error");
-    }
-  };
+  const [photoUrl,  setPhotoUrl]  = useState<string | null>(fingerImages[finger] ?? null);
+  const [refIdx,    setRefIdx]    = useState(1); // default: Quarter
+  const [reviewIdx, setReviewIdx] = useState<number | null>(null);
 
   const handlePhoto = (file: File) => {
     const url = URL.createObjectURL(file);
-    setPhotoFile(file);
+    onSetFingerImage(finger, url);
     setPhotoUrl(url);
-    runAnalysis(file);
+    setPhase("calibrate");
   };
 
-  const handleConfirm = () => {
-    if (!analysis || !photoUrl) return;
-    const containerW = containerRef.current?.clientWidth ?? 390;
-    const containerH = containerW * (naturalSize.h / naturalSize.w);
-
-    const calLeft  = { x: analysis.ref_left  * containerW, y: containerH * 0.5 };
-    const calRight = { x: analysis.ref_right  * containerW, y: containerH * 0.5 };
-    const nailLeft  = { x: analysis.nail_left  * containerW, y: analysis.nail_y * containerH };
-    const nailRight = { x: analysis.nail_right * containerW, y: analysis.nail_y * containerH };
-    const nailWidthPx = (analysis.nail_right - analysis.nail_left) * containerW;
-
-    onSetFingerImage(finger, photoUrl);
-    onCalibrate(finger, calLeft, calRight, REF_OBJECTS[refIdx].mm);
-    onMeasure(currentFinger, nailWidthPx, nailLeft, nailRight);
+  const handleCalibrate = (_dist: number, left: Point, right: Point) => {
+    onCalibrate(finger, left, right, REF_OBJECTS[refIdx].mm);
+    setPhase("measure");
   };
 
   const handleRetake = () => {
     setPhotoUrl(null);
-    setPhotoFile(null);
-    setAnalysis(null);
-    setErrorMsg(null);
     setPhase("photo");
   };
 
-  const handleRetry = () => {
-    if (photoFile) runAnalysis(photoFile);
+  const handleChipClick = (i: number) => {
+    if (i >= currentFinger) return;
+    setReviewIdx(prev => prev === i ? null : i);
   };
 
-  // ── Chip row ──────────────────────────────────────────────────────────────
+  // ── Finger chip row ───────────────────────────────────────────────────────
   const chipRow = (
     <div className="flex items-center gap-2 px-2">
       <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1">
         {fingerOrder.map((f, i) => {
-          const done   = i < currentFinger;
-          const active = i === currentFinger;
+          const done      = i < currentFinger;
+          const active    = i === currentFinger;
           const reviewing = reviewIdx === i;
           return (
             <button
               key={f}
-              onClick={() => done && setReviewIdx(prev => prev === i ? null : i)}
+              onClick={() => handleChipClick(i)}
               disabled={!done}
               className={[
                 "shrink-0 px-3 py-1.5 rounded-full font-mono text-[10px] uppercase tracking-wider transition-all",
@@ -341,15 +253,16 @@ function MeasureStep({
       {currentFinger > 0 && (
         <button
           onClick={onUndo}
-          className="shrink-0 font-mono text-[10px] text-grippy-black/50 active:text-grippy-black border border-grippy-black/15 rounded-full px-2.5 py-1.5"
+          className="shrink-0 flex items-center gap-1 font-mono text-[10px] text-grippy-black/50 active:text-grippy-black transition-colors border border-grippy-black/15 rounded-full px-2.5 py-1.5"
         >
+          <Undo2 size={11} />
           Redo {fingerLabels[fingerOrder[currentFinger - 1]]}
         </button>
       )}
     </div>
   );
 
-  // ── Review panel ──────────────────────────────────────────────────────────
+  // ── Review panel ─────────────────────────────────────────────────────────
   const reviewPts = reviewIdx !== null ? measurementPoints[fingerOrder[reviewIdx]] : undefined;
   const reviewImg = reviewIdx !== null ? fingerImages[fingerOrder[reviewIdx]]      : undefined;
 
@@ -390,36 +303,13 @@ function MeasureStep({
         {chipRow}
         {reviewPanel}
 
-        {/* Reference object selector */}
-        <div className="flex flex-col gap-2 px-2">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
-            What reference object will you place next to your finger?
-          </p>
-          <div className="flex gap-2">
-            {REF_OBJECTS.map((obj, i) => (
-              <button
-                key={obj.label}
-                onClick={() => setRefIdx(i)}
-                className={[
-                  "px-3 py-1.5 rounded-full font-mono text-[10px] border transition-all",
-                  i === refIdx
-                    ? "bg-grippy-black text-grippy-cream border-grippy-black"
-                    : "bg-transparent text-grippy-black/50 border-grippy-black/20",
-                ].join(" ")}
-              >
-                {obj.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="bg-grippy-black/5 rounded-2xl px-4 py-3 space-y-2 mx-2">
           <p className="font-unbounded text-xs font-semibold text-grippy-black">Tips:</p>
           <ul className="space-y-1.5">
             {[
               `Lay your ${label.toLowerCase()} flat on a plain surface`,
-              `Place a ${REF_OBJECTS[refIdx].label.toLowerCase()} next to your finger`,
-              "Fill the frame — both finger and reference visible",
+              "Place a coin or credit card next to your finger",
+              "Fill the frame — finger and coin both visible",
               "Get close for better accuracy",
             ].map(tip => (
               <li key={tip} className="flex items-start gap-2 font-mono text-[11px] text-grippy-black/60">
@@ -437,96 +327,90 @@ function MeasureStep({
     );
   }
 
-  // ── Phase: analyzing ──────────────────────────────────────────────────────
-  if (phase === "analyzing") {
-    return (
-      <div className="flex flex-col items-center justify-center gap-5 px-4 pt-4 min-h-[60vh]">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
-        >
-          <Loader2 size={36} className="text-grippy-cobalt" />
-        </motion.div>
-        <div className="text-center space-y-1">
-          <p className="font-unbounded text-sm font-semibold text-grippy-black">Analyzing photo…</p>
-          <p className="font-mono text-[11px] text-grippy-black/40">
-            Detecting your {label} nail and reference object
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Phase: error ──────────────────────────────────────────────────────────
-  if (phase === "error") {
+  // ── Phase: calibrate ──────────────────────────────────────────────────────
+  if (phase === "calibrate") {
     return (
       <div className="flex flex-col gap-5 px-4 pt-4">
         <div className="px-2 space-y-2">
           <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
             Finger {currentFinger + 1} of 5 · {label}
           </p>
-          <h2 className="font-unbounded text-xl font-bold text-grippy-black">Detection failed</h2>
+          <h2 className="font-unbounded text-xl font-bold text-grippy-black">
+            Calibrate the photo
+          </h2>
+          <p className="font-mono text-sm text-grippy-black/50">
+            Tap the left then right edge of your reference object.
+          </p>
         </div>
 
         {chipRow}
 
-        <div className="mx-2 rounded-2xl bg-rose-50 border border-rose-200 px-4 py-4 flex items-start gap-3">
-          <AlertCircle size={16} className="text-rose-500 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="font-unbounded text-xs font-semibold text-rose-700">Couldn't detect</p>
-            <p className="font-mono text-[11px] text-rose-600/80 leading-relaxed">
-              Make sure your finger and {REF_OBJECTS[refIdx].label.toLowerCase()} are both clearly visible in the photo.
-            </p>
+        <div className="flex flex-col gap-2 px-2">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
+            What reference object did you use?
+          </p>
+          <div className="flex gap-2">
+            {REF_OBJECTS.map((obj, i) => (
+              <button
+                key={obj.label}
+                onClick={() => setRefIdx(i)}
+                className={[
+                  "px-3 py-1.5 rounded-full font-mono text-[10px] border transition-all",
+                  i === refIdx
+                    ? "bg-grippy-black text-grippy-cream border-grippy-black"
+                    : "bg-transparent text-grippy-black/50 border-grippy-black/20 active:border-grippy-black",
+                ].join(" ")}
+              >
+                {obj.label}
+              </button>
+            ))}
           </div>
+          <p className="font-mono text-[10px] text-grippy-black/30">
+            {REF_OBJECTS[refIdx].mm} mm assumed width
+          </p>
         </div>
 
-        <div className="flex gap-3 px-2">
-          <GrippyButton fullWidth variant="outline" onClick={handleRetry}>
-            Try again
-          </GrippyButton>
-          <GrippyButton fullWidth onClick={handleRetake}>
+        <div className="flex items-center justify-between px-2">
+          <span className="font-mono text-[11px] text-grippy-black/50">
+            Tap the outer edges of the {REF_OBJECTS[refIdx].label.toLowerCase()}
+          </span>
+          <button
+            onClick={handleRetake}
+            className="font-mono text-[11px] text-grippy-black/40 underline underline-offset-2 active:text-grippy-black"
+          >
             Retake photo
-          </GrippyButton>
+          </button>
         </div>
+
+        <MeasurementCanvas
+          key={`cal-${currentFinger}-${photoUrl}`}
+          imageUrl={photoUrl!}
+          prompt={`Tap both edges of the ${REF_OBJECTS[refIdx].label.toLowerCase()}`}
+          onMeasure={handleCalibrate}
+        />
       </div>
     );
   }
 
-  // ── Phase: confirm ────────────────────────────────────────────────────────
-  const detectedMm = analysis
-    ? ((analysis.nail_right - analysis.nail_left) / (analysis.ref_right - analysis.ref_left) * REF_OBJECTS[refIdx].mm).toFixed(1)
-    : null;
-
+  // ── Phase: measure ────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col gap-5 px-4 pt-4" ref={containerRef}>
+    <div className="flex flex-col gap-5 px-4 pt-4">
       <div className="px-2 space-y-2">
         <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
           Finger {currentFinger + 1} of 5 · {label}
         </p>
         <h2 className="font-unbounded text-xl font-bold text-grippy-black">
-          Check the detection
+          Measure your {label}
         </h2>
-        <p className="font-mono text-sm text-grippy-black/50">
-          Blue line = reference · Dark line = nail
-        </p>
       </div>
 
       {chipRow}
-
-      {photoUrl && analysis && (
-        <DetectionCanvas
-          imageUrl={photoUrl}
-          analysis={analysis}
-          referenceMm={REF_OBJECTS[refIdx].mm}
-          onNaturalSize={(w, h) => setNaturalSize({ w, h })}
-        />
-      )}
+      {reviewPanel}
 
       <div className="flex items-center justify-between px-2">
-        <div className="space-y-0.5">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">Detected width</p>
-          <p className="font-unbounded text-2xl font-bold text-grippy-black">{detectedMm} mm</p>
-        </div>
+        <span className="font-mono text-[11px] text-grippy-black/50">
+          Tap both edges of your <span className="text-grippy-black font-medium">{label} nail</span>
+        </span>
         <button
           onClick={handleRetake}
           className="font-mono text-[11px] text-grippy-black/40 underline underline-offset-2 active:text-grippy-black"
@@ -535,11 +419,13 @@ function MeasureStep({
         </button>
       </div>
 
-      <div className="px-2">
-        <GrippyButton fullWidth size="lg" onClick={handleConfirm}>
-          Looks good — Next finger
-        </GrippyButton>
-      </div>
+      <MeasurementCanvas
+        key={`measure-${currentFinger}-${photoUrl}`}
+        imageUrl={photoUrl!}
+        prompt={`Tap both edges of your ${label} nail`}
+        onMeasure={(dist, l, r) => onMeasure(currentFinger, dist, l, r)}
+        lineColor="#0D0D0D"
+      />
     </div>
   );
 }
@@ -562,8 +448,11 @@ export default function Size() {
   const goBack = () => {
     if (state.step === 0) return;
     if (state.step >= 3) {
-      if (state.currentFinger === 0) setStep(2);
-      else undoMeasurement();
+      if (state.currentFinger === 0) {
+        setStep(2);
+      } else {
+        undoMeasurement();
+      }
       return;
     }
     setStep(state.step - 1);
@@ -575,7 +464,7 @@ export default function Size() {
       const { size, confidence } = getClosestSize(arr, state.shape ?? "short-round");
       sessionStorage.setItem(
         "grippy_result",
-        JSON.stringify({ size, confidence, measurements: state.measurements, hand: state.hand, shape: state.shape }),
+        JSON.stringify({ size, confidence, measurements: state.measurements, hand: state.hand, shape: state.shape })
       );
       navigate("/results");
     }
@@ -630,6 +519,7 @@ export default function Size() {
                 key={`measure-${state.currentFinger}`}
                 currentFinger={state.currentFinger}
                 fingerImages={state.fingerImages}
+                fingerCalibrations={state.fingerCalibrations}
                 measurementPoints={state.measurementPoints}
                 onSetFingerImage={setFingerImage}
                 onCalibrate={setFingerCalibration}
