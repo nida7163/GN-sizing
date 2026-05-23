@@ -18,8 +18,8 @@ export interface SizingState {
   step: number;
   hand: "left" | "right" | null;
   shape: NailShape | null;
-  calibration: CalibrationData | null;         // active calibration (set per-finger photo)
-  fingerCalibrations: FingerCalibrationsMap;   // persisted per-finger so undo restores it
+  calibration: CalibrationData | null;
+  fingerCalibrations: FingerCalibrationsMap;
   measurements: MeasurementMap;
   measurementPoints: MeasurementPointsMap;
   fingerImages: FingerImagesMap;
@@ -40,13 +40,14 @@ const initialState: SizingState = {
 
 const STORAGE_KEY = "grippy_sizing";
 
-// Blob URLs are tab-local and don't survive a reload — omit fingerImages when persisting.
+// Always boot at step 0 so the landing page can offer Continue vs Start over.
+// Blob URLs are tab-local and don't survive a reload — omit fingerImages.
 function loadSavedState(): SizingState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return initialState;
     const saved = JSON.parse(raw);
-    return { ...initialState, ...saved, fingerImages: {} };
+    return { ...initialState, ...saved, fingerImages: {}, step: 0 };
   } catch {
     return initialState;
   }
@@ -55,14 +56,17 @@ function loadSavedState(): SizingState {
 export function useSizing() {
   const [state, setState] = useState<SizingState>(loadSavedState);
 
-  // Persist on every state change. Skip step 0 (blank slate) and step 6 (done → clear).
-  // Never persist fingerImages — blob URLs are tab-local and break after reload.
+  // Persist whenever the user is mid-flow (steps 1–5).
+  // step 0: don't touch storage — either truly blank, or user is on landing
+  //         deciding whether to continue (their data must stay intact).
+  // step 6: flow completed — clear storage.
+  // reset() handles explicit clears directly so it doesn't depend on this effect.
   useEffect(() => {
     if (state.step >= 1 && state.step < 6) {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { fingerImages: _omit, ...persistable } = state;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(persistable));
-    } else if (state.step === 0 || state.step >= 6) {
+    } else if (state.step >= 6) {
       localStorage.removeItem(STORAGE_KEY);
     }
   }, [state]);
@@ -83,7 +87,6 @@ export function useSizing() {
     setState(s => ({ ...s, fingerImages: { ...s.fingerImages, [finger]: url } }));
   }, []);
 
-  // Store calibration for a specific finger and set it as the active calibration
   const setFingerCalibration = useCallback((finger: FingerName, left: Point, right: Point, referenceMm = 20) => {
     const pixelWidth   = Math.abs(right.x - left.x);
     const pixelsPerMm  = pixelWidth > 0 ? pixelWidth / referenceMm : 5;
@@ -104,7 +107,6 @@ export function useSizing() {
     const finger = fingerOrder[fingerIndex];
     setState(s => {
       const pixelsPerMm = s.calibration?.pixelsPerMm ?? 5;
-      // Use horizontal X-distance only — consistent with how calibration is measured
       const widthPx     = Math.abs(right.x - left.x);
       const widthMm     = pixelsToMm(widthPx, pixelsPerMm);
       const next        = { ...s.measurements,      [finger]: widthMm };
@@ -128,7 +130,6 @@ export function useSizing() {
       const nextPoints  = { ...s.measurementPoints };
       delete next[finger];
       delete nextPoints[finger];
-      // Restore the calibration that was used for this finger's photo
       const restoredCal = s.fingerCalibrations[finger] ?? null;
       return {
         ...s,
@@ -140,7 +141,20 @@ export function useSizing() {
     });
   }, []);
 
-  const reset = useCallback(() => setState(initialState), []);
+  // Clears localStorage immediately — don't wait for the persistence effect.
+  const reset = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY);
+    setState(initialState);
+  }, []);
+
+  // Jump to the correct step based on how far the user previously got.
+  const resume = useCallback(() => {
+    setState(s => {
+      if (s.hand === null)  return { ...s, step: 1 };
+      if (s.shape === null) return { ...s, step: 2 };
+      return { ...s, step: 3 };
+    });
+  }, []);
 
   const getMeasurementArray = useCallback((s: SizingState): number[] => {
     return fingerOrder.map(f => s.measurements[f] ?? 0);
@@ -173,6 +187,7 @@ export function useSizing() {
     undoMeasurement,
     getMeasurementArray,
     reset,
+    resume,
     restoreForRetake,
   };
 }

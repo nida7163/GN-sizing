@@ -90,7 +90,30 @@ const STEPS_PREVIEW = [
   { label: "Tap 4 points per photo",  time: "fast" },
 ];
 
-function LandingStep({ onStart, isGiftMode }: { onStart: () => void; isGiftMode: boolean }) {
+function getResumeLabel(state: { hand: "left" | "right" | null; shape: NailShape | null; currentFinger: number; measurements: MeasurementMap }): string {
+  if (state.hand === null) return "hand selection";
+  if (state.shape === null) return "shape selection";
+  const measuredCount = fingerOrder.filter(f => state.measurements[f] !== undefined).length;
+  if (measuredCount === 0) return "Thumb — finger 1 of 5";
+  const label = fingerLabels[fingerOrder[state.currentFinger]] ?? "next finger";
+  return `${label} — finger ${state.currentFinger + 1} of 5`;
+}
+
+function LandingStep({
+  onStart,
+  isGiftMode,
+  hasSavedProgress,
+  resumeLabel,
+  onContinue,
+  onStartOver,
+}: {
+  onStart: () => void;
+  isGiftMode: boolean;
+  hasSavedProgress: boolean;
+  resumeLabel: string;
+  onContinue: () => void;
+  onStartOver: () => void;
+}) {
   const [showGiftShare, setShowGiftShare] = useState(false);
   const [copied,        setCopied]        = useState(false);
 
@@ -175,7 +198,22 @@ function LandingStep({ onStart, isGiftMode }: { onStart: () => void; isGiftMode:
           ))}
         </div>
 
-        <GrippyButton size="lg" fullWidth onClick={onStart}>Start Sizing</GrippyButton>
+        {hasSavedProgress ? (
+          /* Saved progress detected — offer continue or restart */
+          <div className="w-full space-y-2">
+            <GrippyButton size="lg" fullWidth onClick={onContinue}>
+              Continue — {resumeLabel}
+            </GrippyButton>
+            <button
+              onClick={onStartOver}
+              className="w-full py-2.5 font-mono text-xs text-grippy-black/40 active:text-grippy-black/70 transition-colors"
+            >
+              Start over
+            </button>
+          </div>
+        ) : (
+          <GrippyButton size="lg" fullWidth onClick={onStart}>Start Sizing</GrippyButton>
+        )}
 
         {/* Gift mode trigger */}
         <AnimatePresence mode="wait">
@@ -765,8 +803,13 @@ export default function Size() {
     recordMeasurement,
     undoMeasurement,
     getMeasurementArray,
+    reset,
+    resume,
     restoreForRetake,
   } = useSizing();
+
+  const hasSavedProgress = state.hand !== null || Object.keys(state.measurements).length > 0;
+  const resumeLabel      = getResumeLabel(state);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("grippy_retake");
@@ -821,6 +864,13 @@ export default function Size() {
           <span className="font-unbounded text-xs font-black text-grippy-cobalt tracking-tight">
             GRIPPY FIT
           </span>
+          {/* Route back to landing where user can confirm restart — avoids accidental loss */}
+          <button
+            onClick={() => setStep(0)}
+            className="font-mono text-[10px] text-grippy-black/35 active:text-grippy-black/60 transition-colors"
+          >
+            Start over
+          </button>
         </div>
       )}
 
@@ -834,7 +884,14 @@ export default function Size() {
         <AnimatePresence mode="wait">
           {state.step === 0 && (
             <PageContainer key="landing" stepKey="landing">
-              <LandingStep onStart={() => setStep(1)} isGiftMode={isGiftMode} />
+              <LandingStep
+                onStart={() => setStep(1)}
+                isGiftMode={isGiftMode}
+                hasSavedProgress={hasSavedProgress}
+                resumeLabel={resumeLabel}
+                onContinue={resume}
+                onStartOver={reset}
+              />
             </PageContainer>
           )}
           {state.step === 1 && (
