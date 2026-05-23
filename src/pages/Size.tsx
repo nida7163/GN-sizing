@@ -203,7 +203,9 @@ function MeasureStep({
   const [refIdx,      setRefIdx]      = useState(1); // default: Quarter
   const [reviewIdx,   setReviewIdx]   = useState<number | null>(null);
   const [canvasKey,   setCanvasKey]   = useState(0);
+  const [calCanvasKey, setCalCanvasKey] = useState(0);
   const [measureWarn, setMeasureWarn] = useState<{ mm: number; dist: number; left: Point; right: Point } | null>(null);
+  const [calWarn,     setCalWarn]     = useState<{ dist: number; left: Point; right: Point } | null>(null);
 
   const handlePhoto = (file: File) => {
     const url = URL.createObjectURL(file);
@@ -212,9 +214,20 @@ function MeasureStep({
     setPhase("calibrate");
   };
 
-  const handleCalibrate = (_dist: number, left: Point, right: Point) => {
+  const commitCalibrate = (left: Point, right: Point) => {
     onCalibrate(finger, left, right, REF_OBJECTS[refIdx].mm);
+    setCalWarn(null);
     setPhase("measure");
+  };
+
+  const handleCalibrateAttempt = (_dist: number, left: Point, right: Point) => {
+    const pixelWidth  = Math.abs(right.x - left.x);
+    const pixelsPerMm = pixelWidth / REF_OBJECTS[refIdx].mm;
+    if (pixelsPerMm < 0.5 || pixelsPerMm > 30) {
+      setCalWarn({ dist: _dist, left, right });
+    } else {
+      commitCalibrate(left, right);
+    }
   };
 
   const handleRetakePhoto = () => {
@@ -398,11 +411,40 @@ function MeasureStep({
         </div>
 
         <MeasurementCanvas
-          key={`cal-${currentFinger}-${photoUrl}`}
+          key={`cal-${currentFinger}-${photoUrl}-${calCanvasKey}`}
           imageUrl={photoUrl!}
           prompt={`Tap both edges of the ${REF_OBJECTS[refIdx].label.toLowerCase()}`}
-          onMeasure={handleCalibrate}
+          onMeasure={handleCalibrateAttempt}
         />
+
+        <AnimatePresence>
+          {calWarn && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              className="mx-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 space-y-3"
+            >
+              <p className="font-mono text-xs text-amber-800 leading-relaxed">
+                Those points seem too close or too far apart — did you tap the outer edges of the {REF_OBJECTS[refIdx].label.toLowerCase()}?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setCalWarn(null); setCalCanvasKey(k => k + 1); }}
+                  className="flex-1 py-2 rounded-xl bg-amber-100 font-mono text-xs text-amber-800 font-medium active:bg-amber-200 transition-colors"
+                >
+                  Try Again
+                </button>
+                <button
+                  onClick={() => commitCalibrate(calWarn.left, calWarn.right)}
+                  className="flex-1 py-2 rounded-xl bg-grippy-black/5 font-mono text-xs text-grippy-black/60 active:bg-grippy-black/10 transition-colors"
+                >
+                  Accept Anyway
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }

@@ -155,7 +155,11 @@ export default function Results() {
           transition={{ delay: 0.4, duration: 0.5 }}
           className="flex flex-col gap-3 mt-auto"
         >
-          <GrippyButton fullWidth size="lg">
+          <GrippyButton
+            fullWidth
+            size="lg"
+            onClick={() => window.open("https://grippynails.co", "_blank", "noopener,noreferrer")}
+          >
             <ShoppingBag size={16} />
             Shop {shapeName} Sets
           </GrippyButton>
