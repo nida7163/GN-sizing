@@ -8,6 +8,7 @@ interface MeasurementCanvasProps {
   onMeasure: (distancePx: number, left: Point, right: Point) => void;
   prompt: string;
   lineColor?: string;
+  onImageError?: () => void;
 }
 
 type TapState = { first: Point | null; second: Point | null };
@@ -17,16 +18,18 @@ export function MeasurementCanvas({
   onMeasure,
   prompt,
   lineColor = "#0D0D0D",
+  onImageError,
 }: MeasurementCanvasProps) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const imageRef     = useRef<HTMLImageElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // ── State (drives JSX re-renders) ─────────────────────────────────────────
-  const [zoom,      setZoom]      = useState(1);
-  const [pan,       setPan]       = useState({ x: 0, y: 0 });
-  const [taps,      setTaps]      = useState<TapState>({ first: null, second: null });
-  const [committed, setCommitted] = useState(false);
+  const [zoom,       setZoom]       = useState(1);
+  const [pan,        setPan]        = useState({ x: 0, y: 0 });
+  const [taps,       setTaps]       = useState<TapState>({ first: null, second: null });
+  const [committed,  setCommitted]  = useState(false);
+  const [imgFailed,  setImgFailed]  = useState(false);
 
   // ── Refs mirroring state — always current, safe to read in native listeners
   const zoomRef      = useRef(1);
@@ -166,6 +169,7 @@ export function MeasurementCanvas({
 
   // ── Load image ────────────────────────────────────────────────────────────
   useEffect(() => {
+    setImgFailed(false);
     const img = new Image();
     img.onload = () => {
       imageRef.current = img;
@@ -177,8 +181,12 @@ export function MeasurementCanvas({
       canvas.height = maxW * (img.naturalHeight / img.naturalWidth);
       drawRef.current();
     };
+    img.onerror = () => {
+      setImgFailed(true);
+      onImageError?.();
+    };
     img.src = imageUrl;
-  }, [imageUrl]);
+  }, [imageUrl]); // onImageError intentionally omitted — stable callback ref
 
   // Redraw when state changes (covers undo + mouse path)
   useEffect(() => { drawRef.current(); }, [zoom, pan, taps]);
@@ -358,15 +366,31 @@ export function MeasurementCanvas({
         className="relative w-full rounded-2xl overflow-hidden bg-grippy-black shadow-xl"
         style={{ cursor: isZoomed ? "grab" : "crosshair" }}
       >
-        <canvas
-          ref={canvasRef}
-          className="w-full touch-none select-none"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={() => { didDrag.current = false; }}
-        />
-        {isZoomed && (
+        {imgFailed ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-16 px-6 text-center">
+            <p className="font-mono text-sm text-grippy-cream/70">
+              Photo couldn't load.
+            </p>
+            {onImageError && (
+              <button
+                onClick={onImageError}
+                className="font-mono text-xs text-grippy-cream underline underline-offset-2 active:text-grippy-cream/70 transition-colors"
+              >
+                Retake photo
+              </button>
+            )}
+          </div>
+        ) : (
+          <canvas
+            ref={canvasRef}
+            className="w-full touch-none select-none"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={() => { didDrag.current = false; }}
+          />
+        )}
+        {isZoomed && !imgFailed && (
           <div className="absolute top-2.5 right-2.5 bg-grippy-black/60 backdrop-blur-sm text-grippy-cream font-mono text-[11px] tabular-nums px-2 py-1 rounded-full pointer-events-none">
             {zoom.toFixed(1)}×
           </div>

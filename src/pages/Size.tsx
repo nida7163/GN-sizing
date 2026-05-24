@@ -348,6 +348,8 @@ function MeasureStep({
   measurementPoints,
   measurements,
   shape,
+  refIdx,
+  onRefIdxChange,
   onSetFingerImage,
   onCalibrate,
   onMeasure,
@@ -359,6 +361,8 @@ function MeasureStep({
   measurementPoints: MeasurementPointsMap;
   measurements: MeasurementMap;
   shape: NailShape | null;
+  refIdx: number;
+  onRefIdxChange: (i: number) => void;
   onSetFingerImage: (finger: FingerName, url: string) => void;
   onCalibrate: (finger: FingerName, left: Point, right: Point, referenceMm?: number) => void;
   onMeasure: (fingerIdx: number, distPx: number, left: Point, right: Point) => void;
@@ -377,7 +381,6 @@ function MeasureStep({
   });
 
   const [photoUrl,    setPhotoUrl]    = useState<string | null>(fingerImages[finger] ?? null);
-  const [refIdx,      setRefIdx]      = useState(1); // default: Quarter
   const [reviewIdx,   setReviewIdx]   = useState<number | null>(null);
   const [canvasKey,   setCanvasKey]   = useState(0);
   const [calCanvasKey, setCalCanvasKey] = useState(0);
@@ -410,6 +413,7 @@ function MeasureStep({
   const handleRetakePhoto = () => {
     setPhotoUrl(null);
     setMeasureWarn(null);
+    setCalWarn(null);
     setPhase("photo");
   };
 
@@ -461,7 +465,7 @@ function MeasureStep({
           className="shrink-0 flex items-center gap-1 font-mono text-[10px] text-grippy-black/50 active:text-grippy-black transition-colors border border-grippy-black/15 rounded-full px-2.5 py-1.5"
         >
           <Undo2 size={11} />
-          Redo {fingerLabels[finger]}
+          Redo {fingerLabels[fingerOrder[currentFinger - 1]]}
         </button>
       )}
     </div>
@@ -638,7 +642,7 @@ function MeasureStep({
             {REF_OBJECTS.map((obj, i) => (
               <button
                 key={obj.label}
-                onClick={() => setRefIdx(i)}
+                onClick={() => onRefIdxChange(i)}
                 className={[
                   "px-3 py-1.5 rounded-full font-mono text-[10px] border transition-all",
                   i === refIdx
@@ -704,7 +708,7 @@ function MeasureStep({
             {REF_OBJECTS.map((obj, i) => (
               <button
                 key={obj.label}
-                onClick={() => setRefIdx(i)}
+                onClick={() => onRefIdxChange(i)}
                 className={[
                   "px-3 py-1.5 rounded-full font-mono text-[10px] border transition-all",
                   i === refIdx
@@ -738,6 +742,7 @@ function MeasureStep({
           imageUrl={photoUrl!}
           prompt={`Tap both edges of the ${REF_OBJECTS[refIdx].label.toLowerCase()}`}
           onMeasure={handleCalibrateAttempt}
+          onImageError={handleRetakePhoto}
         />
 
         <AnimatePresence>
@@ -808,6 +813,7 @@ function MeasureStep({
         imageUrl={photoUrl!}
         prompt={`Tap the widest part of your ${label} nail (near base)`}
         onMeasure={handleMeasureAttempt}
+        onImageError={handleRetakePhoto}
         lineColor="#0D0D0D"
       />
 
@@ -862,6 +868,8 @@ export default function Size() {
     resume,
     restoreForRetake,
   } = useSizing();
+
+  const [refIdx, setRefIdx] = useState(1); // default: Quarter; lifted so it persists across fingers
 
   const hasSavedProgress = state.hand !== null || Object.keys(state.measurements).length > 0;
   const resumeLabel      = getResumeLabel(state);
@@ -975,6 +983,8 @@ export default function Size() {
                 measurementPoints={state.measurementPoints}
                 measurements={state.measurements}
                 shape={state.shape}
+                refIdx={refIdx}
+                onRefIdxChange={setRefIdx}
                 onSetFingerImage={setFingerImage}
                 onCalibrate={setFingerCalibration}
                 onMeasure={recordMeasurement}
