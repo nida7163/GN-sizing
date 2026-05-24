@@ -629,6 +629,29 @@ function MeasureStep({
         {chipRow}
         {reviewPanel}
 
+        {/* Reference object picker — shown here so tips update before the photo is taken */}
+        <div className="flex flex-col gap-2">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
+            What will you place beside your nail?
+          </p>
+          <div className="flex gap-2">
+            {REF_OBJECTS.map((obj, i) => (
+              <button
+                key={obj.label}
+                onClick={() => setRefIdx(i)}
+                className={[
+                  "px-3 py-1.5 rounded-full font-mono text-[10px] border transition-all",
+                  i === refIdx
+                    ? "bg-grippy-black text-grippy-cream border-grippy-black"
+                    : "bg-transparent text-grippy-black/50 border-grippy-black/20 active:border-grippy-black",
+                ].join(" ")}
+              >
+                {obj.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="bg-grippy-black/5 rounded-2xl px-4 py-4 space-y-2">
           <p className="font-unbounded text-xs font-semibold text-grippy-black">Tips:</p>
           <ul className="space-y-2">
