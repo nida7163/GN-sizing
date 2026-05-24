@@ -36,7 +36,14 @@ export default function Results() {
     const paramSizedUp    = searchParams.get("sizedUp") === "1";
     const paramOriginal   = searchParams.get("originalSize") as SizeKey | null;
 
+    const VALID_SHAPES: NailShape[] = ["short-round", "short-oval"];
+    const VALID_SIZES:  SizeKey[]   = ["XS", "S", "M", "L"];
+
     if (paramSize && paramShape && paramHand) {
+      if (!VALID_SHAPES.includes(paramShape) || !VALID_SIZES.includes(paramSize)) {
+        navigate("/size");
+        return;
+      }
       const measurements: MeasurementMap = {};
       if (paramM) {
         paramM.split(",").forEach((val, i) => {
@@ -141,7 +148,7 @@ export default function Results() {
   if (!result) return null;
 
   const shapeName  = shapeLabels[result.shape] ?? result.shape;
-  const chartSizes = sizeCharts[result.shape][result.size];
+  const chartSizes = sizeCharts[result.shape]?.[result.size] ?? [];
   const hasMeasurements = fingerOrder.some(f => result.measurements[f] !== undefined);
 
   // ── Shared view (gifter opening a gift link) ──────────────────────────────

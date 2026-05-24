@@ -47,6 +47,9 @@ export function MeasurementCanvas({
   lineColorRef.current = lineColor;
   onMeasureRef.current = onMeasure;
 
+  // ── Commit timer — tracked so we can cancel it on undo/reset/unmount ─────
+  const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ── Gesture tracking refs ─────────────────────────────────────────────────
   const didDrag          = useRef(false);
   const dragStart        = useRef({ x: 0, y: 0 });
@@ -153,12 +156,16 @@ export function MeasurementCanvas({
       const second    = pt;
       const dist      = Math.hypot(second.x - first.x, second.y - first.y);
       next = { first, second };
-      setTimeout(() => {
+      if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = setTimeout(() => {
+        commitTimerRef.current = null;
         committedRef.current = true;
         setCommitted(true);
         onMeasureRef.current(dist, first, second);
       }, 600);
     } else {
+      // Third tap: cancel any pending commit and start fresh
+      if (commitTimerRef.current) { clearTimeout(commitTimerRef.current); commitTimerRef.current = null; }
       next = { first: pt, second: null };
     }
 
@@ -187,6 +194,11 @@ export function MeasurementCanvas({
     };
     img.src = imageUrl;
   }, [imageUrl]); // onImageError intentionally omitted — stable callback ref
+
+  // Cancel any pending commit timer on unmount to prevent firing into a dead component
+  useEffect(() => () => {
+    if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+  }, []);
 
   // Redraw when state changes (covers undo + mouse path)
   useEffect(() => { drawRef.current(); }, [zoom, pan, taps]);
@@ -330,6 +342,7 @@ export function MeasurementCanvas({
   };
 
   const handleUndo = () => {
+    if (commitTimerRef.current) { clearTimeout(commitTimerRef.current); commitTimerRef.current = null; }
     const next: TapState = tapsRef.current.second
       ? { ...tapsRef.current, second: null }
       : { first: null, second: null };

@@ -15,7 +15,10 @@ export function UploadCard({ onFile, preview, className }: UploadCardProps) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) onFile(file);
+    if (file) {
+      onFile(file);
+      e.target.value = ""; // allow re-selecting the same file after a retake
+    }
   };
 
   if (preview) {
