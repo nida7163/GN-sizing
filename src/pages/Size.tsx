@@ -297,7 +297,7 @@ function HandStep({ onSelect }: { onSelect: (hand: "left" | "right") => void }) 
             key={side} whileTap={{ scale: 0.95 }} onClick={() => onSelect(side)}
             className="flex flex-col items-center gap-4 bg-grippy-cream border-2 border-grippy-black/10 rounded-3xl p-8 active:border-grippy-black transition-colors"
           >
-            <Hand size={40} className="text-grippy-black" style={{ transform: side === "right" ? "scaleX(-1)" : "none" }} />
+            <Hand size={40} className="text-grippy-black" style={{ transform: side === "left" ? "scaleX(-1)" : "none" }} />
             <span className="font-unbounded text-sm font-semibold text-grippy-black capitalize">{side} Hand</span>
           </motion.button>
         ))}
