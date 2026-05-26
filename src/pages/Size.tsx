@@ -341,6 +341,211 @@ function ShapeStep({ onSelect }: { onSelect: (shape: NailShape) => void }) {
 // ── AI review canvas: draggable ref + nail markers overlaid on photo ─────────
 type MarkerKey = "refLeft" | "refRight" | "nailLeft" | "nailRight";
 
+// A single cropped panel — shows a horizontal slice of the image around `centerY`
+// and lets the user drag the two markers (left/right) within it.
+function CroppedPanel({
+  imageUrl,
+  imageRef,
+  left,
+  right,
+  centerY,
+  color,
+  label,
+  lKey,
+  rKey,
+  onUpdate,
+}: {
+  imageUrl: string;
+  imageRef: React.MutableRefObject<HTMLImageElement | null>;
+  left: Point;
+  right: Point;
+  centerY: number; // natural-image y of the center of this crop
+  color: string;
+  label: string;
+  lKey: MarkerKey;
+  rKey: MarkerKey;
+  onUpdate: (key: MarkerKey, pt: Point) => void;
+}) {
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const draggingKey  = useRef<MarkerKey | null>(null);
+  const [, forceUpdate] = useState(0);
+
+  // How tall the crop is as a fraction of the full image height
+  const CROP_FRAC = 0.28;
+
+  const getCropBounds = (img: HTMLImageElement) => {
+    const half  = (CROP_FRAC / 2) * img.naturalHeight;
+    const top   = Math.max(0, centerY - half);
+    const bot   = Math.min(img.naturalHeight, centerY + half);
+    return { top, bot, height: bot - top };
+  };
+
+  const draw = () => {
+    const canvas = canvasRef.current;
+    const img    = imageRef.current;
+    if (!canvas || !img) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const { top, height } = getCropBounds(img);
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Draw the cropped slice of the image
+    ctx.drawImage(img,
+      0, top, img.naturalWidth, height,
+      0, 0,   canvas.width,     canvas.height,
+    );
+
+    // Convert a natural-image point to canvas coords within this crop
+    const toCanvas = (p: Point) => ({
+      x: (p.x / img.naturalWidth)  * canvas.width,
+      y: ((p.y - top) / height)    * canvas.height,
+    });
+
+    const sl = toCanvas(left);
+    const sr = toCanvas(right);
+
+    // Line
+    ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sr.x, sr.y);
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+
+    // Dots
+    const drawDot = (p: { x: number; y: number }, isActive: boolean) => {
+      ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 28 : 22, 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.globalAlpha = isActive ? 0.2 : 0.1; ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 11 : 9, 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 11 : 9, 0, Math.PI * 2);
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.5; ctx.stroke();
+    };
+    drawDot(sl, draggingKey.current === lKey);
+    drawDot(sr, draggingKey.current === rKey);
+
+    // Label above the line
+    ctx.font = "bold 13px 'DM Mono', monospace";
+    ctx.fillStyle = color; ctx.textAlign = "center";
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 4;
+    const tx = (sl.x + sr.x) / 2;
+    const ty = Math.min(sl.y, sr.y) - 16;
+    ctx.strokeText(label, tx, ty);
+    ctx.fillText(label, tx, ty);
+  };
+
+  // Load image once (shared imageRef, but we still need to know when it's ready)
+  useEffect(() => {
+    if (imageRef.current) {
+      const container = containerRef.current;
+      const canvas    = canvasRef.current;
+      if (!container || !canvas) return;
+      canvas.width  = container.clientWidth;
+      canvas.height = Math.round(container.clientWidth * CROP_FRAC * (imageRef.current.naturalHeight / imageRef.current.naturalWidth));
+      draw();
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      imageRef.current = img;
+      const container = containerRef.current;
+      const canvas    = canvasRef.current;
+      if (!container || !canvas) return;
+      canvas.width  = container.clientWidth;
+      canvas.height = Math.round(container.clientWidth * CROP_FRAC * (img.naturalHeight / img.naturalWidth));
+      draw();
+    };
+    img.src = imageUrl;
+  }, [imageUrl]);
+
+  useEffect(() => { draw(); }, [left, right]);
+
+  const clientToNatural = (clientX: number, clientY: number): Point => {
+    const canvas = canvasRef.current!;
+    const img    = imageRef.current!;
+    const { top, height } = getCropBounds(img);
+    const rect   = canvas.getBoundingClientRect();
+    const cx     = (clientX - rect.left) * (canvas.width  / rect.width);
+    const cy     = (clientY - rect.top)  * (canvas.height / rect.height);
+    return {
+      x: cx * (img.naturalWidth  / canvas.width),
+      y: top + cy * (height / canvas.height),
+    };
+  };
+
+  const findClosest = (clientX: number, clientY: number): MarkerKey | null => {
+    const canvas = canvasRef.current;
+    const img    = imageRef.current;
+    if (!canvas || !img) return null;
+    const { top, height } = getCropBounds(img);
+    const rect   = canvas.getBoundingClientRect();
+    const cx     = (clientX - rect.left) * (canvas.width  / rect.width);
+    const cy     = (clientY - rect.top)  * (canvas.height / rect.height);
+    const toC    = (p: Point) => ({
+      x: (p.x / img.naturalWidth)  * canvas.width,
+      y: ((p.y - top) / height)    * canvas.height,
+    });
+    const sl = toC(left);
+    const sr = toC(right);
+    const dl = Math.hypot(sl.x - cx, sl.y - cy);
+    const dr = Math.hypot(sr.x - cx, sr.y - cy);
+    if (dl < 60 || dr < 60) return dl < dr ? lKey : rKey;
+    return null;
+  };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      const k = findClosest(t.clientX, t.clientY);
+      if (k) { e.preventDefault(); draggingKey.current = k; forceUpdate(n => n + 1); }
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!draggingKey.current || e.touches.length !== 1) return;
+      e.preventDefault();
+      onUpdate(draggingKey.current, clientToNatural(e.touches[0].clientX, e.touches[0].clientY));
+    };
+    const onEnd = (e: TouchEvent) => {
+      if (draggingKey.current) { e.preventDefault(); draggingKey.current = null; forceUpdate(n => n + 1); }
+    };
+    canvas.addEventListener("touchstart", onStart, { passive: false });
+    canvas.addEventListener("touchmove",  onMove,  { passive: false });
+    canvas.addEventListener("touchend",   onEnd,   { passive: false });
+    return () => {
+      canvas.removeEventListener("touchstart", onStart);
+      canvas.removeEventListener("touchmove",  onMove);
+      canvas.removeEventListener("touchend",   onEnd);
+    };
+  }, [left, right]);
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    const k = findClosest(e.clientX, e.clientY);
+    if (k) { draggingKey.current = k; forceUpdate(n => n + 1); }
+  };
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!draggingKey.current) return;
+    onUpdate(draggingKey.current, clientToNatural(e.clientX, e.clientY));
+  };
+  const onMouseUp = () => {
+    if (draggingKey.current) { draggingKey.current = null; forceUpdate(n => n + 1); }
+  };
+
+  return (
+    <div ref={containerRef} className="w-full rounded-xl overflow-hidden bg-grippy-black">
+      <canvas
+        ref={canvasRef}
+        className="w-full touch-none select-none block"
+        style={{ cursor: draggingKey.current ? "grabbing" : "grab" }}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+      />
+    </div>
+  );
+}
+
 function AIReviewCanvas({
   imageUrl,
   result,
@@ -350,191 +555,51 @@ function AIReviewCanvas({
   result: AIResult;
   onChange: (next: AIResult) => void;
 }) {
-  const canvasRef    = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const imageRef     = useRef<HTMLImageElement | null>(null);
-  const [draggingKey, setDraggingKey] = useState<MarkerKey | null>(null);
-  const draggingKeyRef = useRef<MarkerKey | null>(null);
-  draggingKeyRef.current = draggingKey;
+  const imageRef = useRef<HTMLImageElement | null>(null);
 
-  const resultRef = useRef(result);
-  resultRef.current = result;
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  const refCenterY  = (result.refLeft.y  + result.refRight.y)  / 2;
+  const nailCenterY = (result.nailLeft.y + result.nailRight.y) / 2;
 
-  const draw = () => {
-    const canvas = canvasRef.current;
-    const img    = imageRef.current;
-    if (!canvas || !img) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-    const scaleX = canvas.width  / img.naturalWidth;
-    const scaleY = canvas.height / img.naturalHeight;
-    const scale  = (p: Point) => ({ x: p.x * scaleX, y: p.y * scaleY });
-    const r      = resultRef.current;
-    const active = draggingKeyRef.current;
-
-    const drawPair = (l: Point, rPt: Point, color: string, label: string, lKey: MarkerKey, rKey: MarkerKey) => {
-      const sl = scale(l);
-      const sr = scale(rPt);
-      const drawMarker = (p: { x: number; y: number }, isActive: boolean) => {
-        // Large outer halo for easy touch targeting
-        ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 28 : 22, 0, Math.PI * 2);
-        ctx.fillStyle = color; ctx.globalAlpha = isActive ? 0.2 : 0.1; ctx.fill();
-        ctx.globalAlpha = 1;
-        // Inner filled dot
-        ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 10 : 8, 0, Math.PI * 2);
-        ctx.fillStyle = color; ctx.fill();
-        // White ring
-        ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 10 : 8, 0, Math.PI * 2);
-        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2.5; ctx.stroke();
-      };
-      ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sr.x, sr.y);
-      ctx.strokeStyle = color; ctx.lineWidth = 2.5;
-      ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
-      drawMarker(sl, active === lKey);
-      drawMarker(sr, active === rKey);
-      ctx.font = "bold 13px 'DM Mono', monospace";
-      ctx.fillStyle = color; ctx.textAlign = "center";
-      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 4;
-      const tx = (sl.x + sr.x) / 2;
-      const ty = Math.min(sl.y, sr.y) - 18;
-      ctx.strokeText(label, tx, ty);
-      ctx.fillText(label, tx, ty);
-    };
-
-    drawPair(r.refLeft,  r.refRight,  "#0066FF", "reference", "refLeft",  "refRight");
-    drawPair(r.nailLeft, r.nailRight, "#0D0D0D", "nail",      "nailLeft", "nailRight");
-  };
-
-  useEffect(() => {
-    const img = new Image();
-    img.onload = () => {
-      imageRef.current = img;
-      const canvas    = canvasRef.current;
-      const container = containerRef.current;
-      if (!canvas || !container) return;
-      const maxW    = container.clientWidth;
-      canvas.width  = maxW;
-      canvas.height = maxW * (img.naturalHeight / img.naturalWidth);
-      draw();
-    };
-    img.src = imageUrl;
-  }, [imageUrl]);
-
-  useEffect(() => { draw(); }, [result, draggingKey]);
-
-  const clientToImage = (clientX: number, clientY: number): Point => {
-    const canvas = canvasRef.current!;
-    const img    = imageRef.current!;
-    const rect   = canvas.getBoundingClientRect();
-    const cx     = (clientX - rect.left) * (canvas.width  / rect.width);
-    const cy     = (clientY - rect.top)  * (canvas.height / rect.height);
-    return {
-      x: cx * (img.naturalWidth  / canvas.width),
-      y: cy * (img.naturalHeight / canvas.height),
-    };
-  };
-
-  const findClosestMarker = (clientX: number, clientY: number): MarkerKey | null => {
-    const canvas = canvasRef.current;
-    const img    = imageRef.current;
-    if (!canvas || !img) return null;
-    const rect   = canvas.getBoundingClientRect();
-    const scaleX = canvas.width  / img.naturalWidth;
-    const scaleY = canvas.height / img.naturalHeight;
-    const cx     = (clientX - rect.left) * (canvas.width  / rect.width);
-    const cy     = (clientY - rect.top)  * (canvas.height / rect.height);
-    const r      = resultRef.current;
-    const candidates: { key: MarkerKey; p: Point }[] = [
-      { key: "refLeft",   p: r.refLeft   },
-      { key: "refRight",  p: r.refRight  },
-      { key: "nailLeft",  p: r.nailLeft  },
-      { key: "nailRight", p: r.nailRight },
-    ];
-    let best: { key: MarkerKey; dist: number } | null = null;
-    for (const { key, p } of candidates) {
-      const sx = p.x * scaleX;
-      const sy = p.y * scaleY;
-      const d  = Math.hypot(sx - cx, sy - cy);
-      if (best === null || d < best.dist) best = { key, dist: d };
-    }
-    // Only grab if within 60px of a marker
-    return best && best.dist < 60 ? best.key : null;
-  };
-
-  // Native touch listeners so preventDefault works on iOS
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      const t   = e.touches[0];
-      const key = findClosestMarker(t.clientX, t.clientY);
-      if (key) {
-        e.preventDefault();
-        draggingKeyRef.current = key;
-        setDraggingKey(key);
-      }
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      const key = draggingKeyRef.current;
-      if (!key || e.touches.length !== 1) return;
-      e.preventDefault();
-      const t  = e.touches[0];
-      const pt = clientToImage(t.clientX, t.clientY);
-      onChangeRef.current({ ...resultRef.current, [key]: pt });
-    };
-
-    const onTouchEnd = (e: TouchEvent) => {
-      if (draggingKeyRef.current) {
-        e.preventDefault();
-        draggingKeyRef.current = null;
-        setDraggingKey(null);
-      }
-    };
-
-    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
-    canvas.addEventListener("touchmove",  onTouchMove,  { passive: false });
-    canvas.addEventListener("touchend",   onTouchEnd,   { passive: false });
-    return () => {
-      canvas.removeEventListener("touchstart", onTouchStart);
-      canvas.removeEventListener("touchmove",  onTouchMove);
-      canvas.removeEventListener("touchend",   onTouchEnd);
-    };
-  }, []);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    const key = findClosestMarker(e.clientX, e.clientY);
-    if (key) { draggingKeyRef.current = key; setDraggingKey(key); }
-  };
-  const handleMouseMove = (e: React.MouseEvent) => {
-    const key = draggingKeyRef.current;
-    if (!key) return;
-    const pt = clientToImage(e.clientX, e.clientY);
-    onChangeRef.current({ ...resultRef.current, [key]: pt });
-  };
-  const handleMouseUp = () => {
-    if (draggingKeyRef.current) { draggingKeyRef.current = null; setDraggingKey(null); }
+  const update = (key: MarkerKey, pt: Point) => {
+    onChange({ ...result, [key]: pt });
   };
 
   return (
-    <div ref={containerRef} className="w-full rounded-2xl overflow-hidden bg-grippy-black shadow-xl">
-      <canvas
-        ref={canvasRef}
-        className="w-full touch-none select-none"
-        style={{ cursor: draggingKey ? "grabbing" : "grab" }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-      />
+    <div className="flex flex-col gap-2">
+      <div>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-cobalt mb-1 px-1">
+          Credit card edges — drag to adjust
+        </p>
+        <CroppedPanel
+          imageUrl={imageUrl}
+          imageRef={imageRef}
+          left={result.refLeft}
+          right={result.refRight}
+          centerY={refCenterY}
+          color="#0066FF"
+          label="credit card"
+          lKey="refLeft"
+          rKey="refRight"
+          onUpdate={update}
+        />
+      </div>
+      <div>
+        <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/50 mb-1 px-1">
+          Nail plate edges — drag to adjust
+        </p>
+        <CroppedPanel
+          imageUrl={imageUrl}
+          imageRef={imageRef}
+          left={result.nailLeft}
+          right={result.nailRight}
+          centerY={nailCenterY}
+          color="#0D0D0D"
+          label="nail"
+          lKey="nailLeft"
+          rKey="nailRight"
+          onUpdate={update}
+        />
+      </div>
     </div>
   );
 }
@@ -995,14 +1060,9 @@ function MeasureStep({
           onChange={setAiResult}
         />
 
-        <div className="bg-grippy-cobalt/10 border border-grippy-cobalt/20 rounded-xl px-4 py-2.5 -mt-2 text-center">
-          <p className="font-mono text-[11px] text-grippy-cobalt font-medium">
-            Drag the dots to line up with the actual edges
-          </p>
-          <p className="font-mono text-[10px] text-grippy-black/40 mt-0.5">
-            Blue dots = {REF_OBJECTS[refIdx].label} edges &nbsp;·&nbsp; Black dots = nail edges
-          </p>
-        </div>
+        <p className="font-mono text-[10px] text-grippy-black/40 text-center -mt-1">
+          Drag any dot left or right to correct it
+        </p>
 
         <div className="bg-grippy-black/[0.04] rounded-2xl px-4 py-3 flex items-center justify-between">
           <span className="font-mono text-xs text-grippy-black/60">Current estimate:</span>
