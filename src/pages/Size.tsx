@@ -11,8 +11,6 @@ import { useSizing } from "@/hooks/use-sizing";
 import type { Point, MeasurementPointsMap, FingerImagesMap, FingerCalibrationsMap, MeasurementMap } from "@/hooks/use-sizing";
 import { fingerOrder, fingerLabels, getClosestSize, sizeCharts, NailShape } from "@/lib/sizeChart";
 import type { FingerName, SizeKey } from "@/lib/sizeChart";
-import { analyzeNailPhoto } from "@/lib/analyze-nail";
-import { supabaseConfigured } from "@/integrations/supabase/client";
 
 const PROGRESS_TOTAL = 8; // 0=Landing, 1=Hand, 2=Shape, 3–7=Thumb–Pinky
 
@@ -338,281 +336,7 @@ function ShapeStep({ onSelect }: { onSelect: (shape: NailShape) => void }) {
   );
 }
 
-// ── AI review canvas: draggable ref + nail markers overlaid on photo ─────────
-type MarkerKey = "refLeft" | "refRight" | "nailLeft" | "nailRight";
-
-// A single cropped panel — shows a horizontal slice of the image around `centerY`
-// and lets the user drag the two markers (left/right) within it.
-function CroppedPanel({
-  imageUrl,
-  imageRef,
-  left,
-  right,
-  centerY,
-  color,
-  label,
-  lKey,
-  rKey,
-  onUpdate,
-}: {
-  imageUrl: string;
-  imageRef: React.MutableRefObject<HTMLImageElement | null>;
-  left: Point;
-  right: Point;
-  centerY: number; // natural-image y of the center of this crop
-  color: string;
-  label: string;
-  lKey: MarkerKey;
-  rKey: MarkerKey;
-  onUpdate: (key: MarkerKey, pt: Point) => void;
-}) {
-  const canvasRef    = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const draggingKey  = useRef<MarkerKey | null>(null);
-  const [, forceUpdate] = useState(0);
-
-  // How tall the crop is as a fraction of the full image height
-  const CROP_FRAC = 0.28;
-
-  const getCropBounds = (img: HTMLImageElement) => {
-    const half  = (CROP_FRAC / 2) * img.naturalHeight;
-    const top   = Math.max(0, centerY - half);
-    const bot   = Math.min(img.naturalHeight, centerY + half);
-    return { top, bot, height: bot - top };
-  };
-
-  const draw = () => {
-    const canvas = canvasRef.current;
-    const img    = imageRef.current;
-    if (!canvas || !img) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const { top, height } = getCropBounds(img);
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Draw the cropped slice of the image
-    ctx.drawImage(img,
-      0, top, img.naturalWidth, height,
-      0, 0,   canvas.width,     canvas.height,
-    );
-
-    // Convert a natural-image point to canvas coords within this crop
-    const toCanvas = (p: Point) => ({
-      x: (p.x / img.naturalWidth)  * canvas.width,
-      y: ((p.y - top) / height)    * canvas.height,
-    });
-
-    const sl = toCanvas(left);
-    const sr = toCanvas(right);
-
-    // Line
-    ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sr.x, sr.y);
-    ctx.strokeStyle = color; ctx.lineWidth = 2.5;
-    ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
-
-    // Dots
-    const drawDot = (p: { x: number; y: number }, isActive: boolean) => {
-      ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 28 : 22, 0, Math.PI * 2);
-      ctx.fillStyle = color; ctx.globalAlpha = isActive ? 0.2 : 0.1; ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 11 : 9, 0, Math.PI * 2);
-      ctx.fillStyle = color; ctx.fill();
-      ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 11 : 9, 0, Math.PI * 2);
-      ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.5; ctx.stroke();
-    };
-    drawDot(sl, draggingKey.current === lKey);
-    drawDot(sr, draggingKey.current === rKey);
-
-    // Label above the line
-    ctx.font = "bold 13px 'DM Mono', monospace";
-    ctx.fillStyle = color; ctx.textAlign = "center";
-    ctx.strokeStyle = "#fff"; ctx.lineWidth = 4;
-    const tx = (sl.x + sr.x) / 2;
-    const ty = Math.min(sl.y, sr.y) - 16;
-    ctx.strokeText(label, tx, ty);
-    ctx.fillText(label, tx, ty);
-  };
-
-  // Load image once (shared imageRef, but we still need to know when it's ready)
-  useEffect(() => {
-    if (imageRef.current) {
-      const container = containerRef.current;
-      const canvas    = canvasRef.current;
-      if (!container || !canvas) return;
-      canvas.width  = container.clientWidth;
-      canvas.height = Math.round(container.clientWidth * CROP_FRAC * (imageRef.current.naturalHeight / imageRef.current.naturalWidth));
-      draw();
-      return;
-    }
-    const img = new Image();
-    img.onload = () => {
-      imageRef.current = img;
-      const container = containerRef.current;
-      const canvas    = canvasRef.current;
-      if (!container || !canvas) return;
-      canvas.width  = container.clientWidth;
-      canvas.height = Math.round(container.clientWidth * CROP_FRAC * (img.naturalHeight / img.naturalWidth));
-      draw();
-    };
-    img.src = imageUrl;
-  }, [imageUrl]);
-
-  useEffect(() => { draw(); }, [left, right]);
-
-  const clientToNatural = (clientX: number, clientY: number): Point => {
-    const canvas = canvasRef.current!;
-    const img    = imageRef.current!;
-    const { top, height } = getCropBounds(img);
-    const rect   = canvas.getBoundingClientRect();
-    const cx     = (clientX - rect.left) * (canvas.width  / rect.width);
-    const cy     = (clientY - rect.top)  * (canvas.height / rect.height);
-    return {
-      x: cx * (img.naturalWidth  / canvas.width),
-      y: top + cy * (height / canvas.height),
-    };
-  };
-
-  const findClosest = (clientX: number, clientY: number): MarkerKey | null => {
-    const canvas = canvasRef.current;
-    const img    = imageRef.current;
-    if (!canvas || !img) return null;
-    const { top, height } = getCropBounds(img);
-    const rect   = canvas.getBoundingClientRect();
-    const cx     = (clientX - rect.left) * (canvas.width  / rect.width);
-    const cy     = (clientY - rect.top)  * (canvas.height / rect.height);
-    const toC    = (p: Point) => ({
-      x: (p.x / img.naturalWidth)  * canvas.width,
-      y: ((p.y - top) / height)    * canvas.height,
-    });
-    const sl = toC(left);
-    const sr = toC(right);
-    const dl = Math.hypot(sl.x - cx, sl.y - cy);
-    const dr = Math.hypot(sr.x - cx, sr.y - cy);
-    if (dl < 60 || dr < 60) return dl < dr ? lKey : rKey;
-    return null;
-  };
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const onStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      const t = e.touches[0];
-      const k = findClosest(t.clientX, t.clientY);
-      if (k) { e.preventDefault(); draggingKey.current = k; forceUpdate(n => n + 1); }
-    };
-    const onMove = (e: TouchEvent) => {
-      if (!draggingKey.current || e.touches.length !== 1) return;
-      e.preventDefault();
-      onUpdate(draggingKey.current, clientToNatural(e.touches[0].clientX, e.touches[0].clientY));
-    };
-    const onEnd = (e: TouchEvent) => {
-      if (draggingKey.current) { e.preventDefault(); draggingKey.current = null; forceUpdate(n => n + 1); }
-    };
-    canvas.addEventListener("touchstart", onStart, { passive: false });
-    canvas.addEventListener("touchmove",  onMove,  { passive: false });
-    canvas.addEventListener("touchend",   onEnd,   { passive: false });
-    return () => {
-      canvas.removeEventListener("touchstart", onStart);
-      canvas.removeEventListener("touchmove",  onMove);
-      canvas.removeEventListener("touchend",   onEnd);
-    };
-  }, [left, right]);
-
-  const onMouseDown = (e: React.MouseEvent) => {
-    const k = findClosest(e.clientX, e.clientY);
-    if (k) { draggingKey.current = k; forceUpdate(n => n + 1); }
-  };
-  const onMouseMove = (e: React.MouseEvent) => {
-    if (!draggingKey.current) return;
-    onUpdate(draggingKey.current, clientToNatural(e.clientX, e.clientY));
-  };
-  const onMouseUp = () => {
-    if (draggingKey.current) { draggingKey.current = null; forceUpdate(n => n + 1); }
-  };
-
-  return (
-    <div ref={containerRef} className="w-full rounded-xl overflow-hidden bg-grippy-black">
-      <canvas
-        ref={canvasRef}
-        className="w-full touch-none select-none block"
-        style={{ cursor: draggingKey.current ? "grabbing" : "grab" }}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
-      />
-    </div>
-  );
-}
-
-function AIReviewCanvas({
-  imageUrl,
-  result,
-  onChange,
-}: {
-  imageUrl: string;
-  result: AIResult;
-  onChange: (next: AIResult) => void;
-}) {
-  const imageRef = useRef<HTMLImageElement | null>(null);
-
-  const refCenterY  = (result.refLeft.y  + result.refRight.y)  / 2;
-  const nailCenterY = (result.nailLeft.y + result.nailRight.y) / 2;
-
-  const update = (key: MarkerKey, pt: Point) => {
-    onChange({ ...result, [key]: pt });
-  };
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div>
-        <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-cobalt mb-1 px-1">
-          Credit card edges — drag to adjust
-        </p>
-        <CroppedPanel
-          imageUrl={imageUrl}
-          imageRef={imageRef}
-          left={result.refLeft}
-          right={result.refRight}
-          centerY={refCenterY}
-          color="#0066FF"
-          label="credit card"
-          lKey="refLeft"
-          rKey="refRight"
-          onUpdate={update}
-        />
-      </div>
-      <div>
-        <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/50 mb-1 px-1">
-          Nail plate edges — drag to adjust
-        </p>
-        <CroppedPanel
-          imageUrl={imageUrl}
-          imageRef={imageRef}
-          left={result.nailLeft}
-          right={result.nailRight}
-          centerY={nailCenterY}
-          color="#0D0D0D"
-          label="nail"
-          lKey="nailLeft"
-          rKey="nailRight"
-          onUpdate={update}
-        />
-      </div>
-    </div>
-  );
-}
-
 // ── Step 3: Per-finger photo → calibrate → measure ────────────────────────────
-type FingerPhase = "photo" | "analyzing" | "review" | "calibrate" | "measure";
-
-interface AIResult {
-  refLeft:   Point;
-  refRight:  Point;
-  nailLeft:  Point;
-  nailRight: Point;
-}
 
 const SIZE_ORDER: SizeKey[] = ["XS", "S", "M", "L"];
 
@@ -649,70 +373,23 @@ function MeasureStep({
   const FINGER_MOTIVATION = ["Let's go!", "Nice one!", "Halfway!", "Almost there!", "Last one!"];
   const motivation = FINGER_MOTIVATION[currentFinger] ?? "";
 
-  const [phase, setPhase] = useState<FingerPhase>(() => {
+  const [phase, setPhase] = useState<"photo" | "calibrate" | "measure">(() => {
     if (!fingerImages[finger])       return "photo";
     if (!fingerCalibrations[finger]) return "calibrate";
     return "measure";
   });
 
-  const [photoUrl,    setPhotoUrl]    = useState<string | null>(fingerImages[finger] ?? null);
-  const [reviewIdx,   setReviewIdx]   = useState<number | null>(null);
-  const [canvasKey,   setCanvasKey]   = useState(0);
+  const [photoUrl,     setPhotoUrl]    = useState<string | null>(fingerImages[finger] ?? null);
+  const [reviewIdx,    setReviewIdx]   = useState<number | null>(null);
+  const [canvasKey,    setCanvasKey]   = useState(0);
   const [calCanvasKey, setCalCanvasKey] = useState(0);
-  const [measureWarn, setMeasureWarn] = useState<{ mm: number; dist: number; left: Point; right: Point } | null>(null);
-  const [calWarn,     setCalWarn]     = useState<{ dist: number; left: Point; right: Point } | null>(null);
-  const [aiResult,    setAiResult]    = useState<AIResult | null>(null);
+  const [measureWarn,  setMeasureWarn] = useState<{ mm: number; dist: number; left: Point; right: Point } | null>(null);
+  const [calWarn,      setCalWarn]     = useState<{ dist: number; left: Point; right: Point } | null>(null);
 
-  const handlePhoto = async (file: File) => {
+  const handlePhoto = (file: File) => {
     const url = URL.createObjectURL(file);
     onSetFingerImage(finger, url);
     setPhotoUrl(url);
-
-    console.log("[Grippy] supabaseConfigured:", supabaseConfigured);
-    console.log("[Grippy] VITE_SUPABASE_URL:", import.meta.env.VITE_SUPABASE_URL);
-    console.log("[Grippy] VITE_SUPABASE_PUBLISHABLE_KEY:", import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ? "set" : "missing");
-
-    if (!supabaseConfigured) {
-      setPhase("calibrate");
-      return;
-    }
-
-    setPhase("analyzing");
-    try {
-      console.log("[Grippy] calling analyzeNailPhoto...");
-      const analysis = await analyzeNailPhoto(file, REF_OBJECTS[refIdx].label);
-
-      // Convert 0-1 fractions → pixel coordinates using natural image dimensions
-      const img = new Image();
-      await new Promise<void>(res => { img.onload = () => res(); img.src = url; });
-      const W    = img.naturalWidth;
-      const H    = img.naturalHeight;
-      const refY  = (analysis.ref_y  ?? analysis.nail_y) * H;
-      const nailY = analysis.nail_y * H;
-
-      setAiResult({
-        refLeft:   { x: analysis.ref_left   * W, y: refY  },
-        refRight:  { x: analysis.ref_right  * W, y: refY  },
-        nailLeft:  { x: analysis.nail_left  * W, y: nailY },
-        nailRight: { x: analysis.nail_right * W, y: nailY },
-      });
-      setPhase("review");
-    } catch (err) {
-      console.warn("[Grippy] AI detection failed, falling back to manual:", err);
-      setPhase("calibrate");
-    }
-  };
-
-  const handleAcceptAI = () => {
-    if (!aiResult) return;
-    onCalibrate(finger, aiResult.refLeft, aiResult.refRight, REF_OBJECTS[refIdx].mm);
-    const distPx = Math.abs(aiResult.nailRight.x - aiResult.nailLeft.x);
-    onMeasure(currentFinger, distPx, aiResult.nailLeft, aiResult.nailRight);
-    setAiResult(null);
-  };
-
-  const handleRejectAI = () => {
-    setAiResult(null);
     setPhase("calibrate");
   };
 
@@ -908,11 +585,11 @@ function MeasureStep({
   );
 
   // ── Phase stepper ─────────────────────────────────────────────────────────
-  const PHASES: { key: FingerPhase; short: string }[] = [
+  const PHASES = [
     { key: "photo",     short: "Photo" },
     { key: "calibrate", short: "Calibrate" },
     { key: "measure",   short: "Measure" },
-  ];
+  ] as const;
   const phaseIdx = PHASES.findIndex(p => p.key === phase);
 
   const phaseStepper = (
@@ -996,106 +673,6 @@ function MeasureStep({
         </div>
 
         <UploadCard onFile={handlePhoto} />
-      </div>
-    );
-  }
-
-  // ── Phase: analyzing ─────────────────────────────────────────────────────
-  if (phase === "analyzing") {
-    return (
-      <div className="flex flex-col gap-6 px-5 pt-8">
-        <div className="space-y-1">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
-            Finger {currentFinger + 1} of 5
-          </p>
-          <h2 className="font-unbounded text-xl font-bold text-grippy-black">
-            Analyzing…
-          </h2>
-        </div>
-        <div className="flex flex-col items-center justify-center gap-4 py-16">
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            className="w-10 h-10 rounded-full border-2 border-grippy-black/10 border-t-grippy-black"
-          />
-          <p className="font-mono text-sm text-grippy-black/50 text-center">
-            AI is finding your nail edges…
-          </p>
-          <button
-            onClick={() => setPhase("calibrate")}
-            className="font-mono text-[11px] text-grippy-black/30 underline underline-offset-2 active:text-grippy-black/60"
-          >
-            Tap manually instead
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Phase: review AI detection ───────────────────────────────────────────
-  if (phase === "review" && aiResult && photoUrl) {
-    const refPx       = Math.abs(aiResult.refRight.x  - aiResult.refLeft.x);
-    const nailPx      = Math.abs(aiResult.nailRight.x - aiResult.nailLeft.x);
-    const pixelsPerMm = refPx / REF_OBJECTS[refIdx].mm;
-    const nailMm      = nailPx / pixelsPerMm;
-    const looksReasonable = nailMm >= 5 && nailMm <= 25;
-
-    return (
-      <div className="flex flex-col gap-6 px-5 pt-8">
-        <div className="space-y-1">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
-            Finger {currentFinger + 1} of 5
-          </p>
-          <h2 className="font-unbounded text-xl font-bold text-grippy-black">
-            Does this look right?
-          </h2>
-          <p className="font-mono text-sm text-grippy-black/50 pt-1">
-            Blue = {REF_OBJECTS[refIdx].label.toLowerCase()} • Black = nail edges
-          </p>
-        </div>
-
-        <AIReviewCanvas
-          imageUrl={photoUrl}
-          result={aiResult}
-          onChange={setAiResult}
-        />
-
-        <p className="font-mono text-[10px] text-grippy-black/40 text-center -mt-1">
-          Drag any dot left or right to correct it
-        </p>
-
-        <div className="bg-grippy-black/[0.04] rounded-2xl px-4 py-3 flex items-center justify-between">
-          <span className="font-mono text-xs text-grippy-black/60">Current estimate:</span>
-          <span className="font-unbounded text-lg font-bold text-grippy-black tabular-nums">
-            {nailMm.toFixed(1)} mm
-          </span>
-        </div>
-
-        {!looksReasonable && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
-            <p className="font-mono text-xs text-amber-800 leading-relaxed">
-              That measurement looks off (typical nails are 8–20 mm). Tap manually for a better result.
-            </p>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2">
-          <GrippyButton size="lg" fullWidth onClick={handleAcceptAI}>
-            Looks correct
-          </GrippyButton>
-          <button
-            onClick={handleRejectAI}
-            className="w-full py-3 font-mono text-xs text-grippy-black/50 active:text-grippy-black underline underline-offset-2 transition-colors"
-          >
-            Tap manually instead
-          </button>
-          <button
-            onClick={handleRetakePhoto}
-            className="w-full py-2 font-mono text-[11px] text-grippy-black/35 active:text-grippy-black/60 transition-colors"
-          >
-            Retake photo
-          </button>
-        </div>
       </div>
     );
   }
