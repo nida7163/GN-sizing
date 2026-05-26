@@ -222,6 +222,14 @@ export default function Results() {
               <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40 mb-3">
                 Their measurements vs size {result.size}
               </p>
+              <div className="flex items-center justify-between mb-2 pb-2 border-b border-grippy-black/10">
+                <span className="font-mono text-[9px] uppercase tracking-wider text-grippy-black/40 w-14">Finger</span>
+                <span className="flex-1 mx-3 font-mono text-[9px] uppercase tracking-wider text-grippy-black/40">Relative width</span>
+                <div className="flex items-center gap-2 text-right">
+                  <span className="font-mono text-[9px] uppercase tracking-wider text-grippy-black/40 w-12">Measured</span>
+                  <span className="font-mono text-[9px] uppercase tracking-wider text-grippy-black/40 w-10">vs {result.size}</span>
+                </div>
+              </div>
               <div className="space-y-3">
                 {fingerOrder.map((finger, i) => {
                   const measured = result.measurements[finger];
@@ -250,9 +258,17 @@ export default function Results() {
                   );
                 })}
               </div>
-              <p className="font-mono text-[10px] text-grippy-black/30 mt-3">
-                Difference from size {result.size} target · green = within 0.5 mm
-              </p>
+              <div className="mt-3 pt-3 border-t border-grippy-black/10 space-y-1">
+                <p className="font-mono text-[10px] text-grippy-black/50">
+                  <span className="text-grippy-black/70">Measured</span> = their actual nail width in millimeters
+                </p>
+                <p className="font-mono text-[10px] text-grippy-black/50">
+                  <span className="text-grippy-black/70">vs {result.size}</span> = difference from the size {result.size} target ·{" "}
+                  <span className="text-emerald-500">green</span> within 0.5 mm ·{" "}
+                  <span className="text-amber-500">amber</span> within 1.5 mm ·{" "}
+                  <span className="text-rose-500">red</span> off by more
+                </p>
+              </div>
             </motion.div>
           )}
 
@@ -361,6 +377,14 @@ export default function Results() {
           <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40 mb-3">
             Your measurements vs size {result.size}
           </p>
+          <div className="flex items-center justify-between mb-2 pb-2 border-b border-grippy-black/10">
+            <span className="font-mono text-[9px] uppercase tracking-wider text-grippy-black/40 w-14">Finger</span>
+            <span className="flex-1 mx-3 font-mono text-[9px] uppercase tracking-wider text-grippy-black/40">Relative width</span>
+            <div className="flex items-center gap-2 text-right">
+              <span className="font-mono text-[9px] uppercase tracking-wider text-grippy-black/40 w-12">Measured</span>
+              <span className="font-mono text-[9px] uppercase tracking-wider text-grippy-black/40 w-10">vs {result.size}</span>
+            </div>
+          </div>
           <div className="space-y-3">
             {fingerOrder.map((finger, i) => {
               const measured = result.measurements[finger];
@@ -400,9 +424,17 @@ export default function Results() {
               );
             })}
           </div>
-          <p className="font-mono text-[10px] text-grippy-black/30 mt-3">
-            Difference from size {result.size} target · green = within 0.5 mm
-          </p>
+          <div className="mt-3 pt-3 border-t border-grippy-black/10 space-y-1">
+            <p className="font-mono text-[10px] text-grippy-black/50">
+              <span className="text-grippy-black/70">Measured</span> = your actual nail width in millimeters
+            </p>
+            <p className="font-mono text-[10px] text-grippy-black/50">
+              <span className="text-grippy-black/70">vs {result.size}</span> = difference from the size {result.size} target ·{" "}
+              <span className="text-emerald-500">green</span> within 0.5 mm ·{" "}
+              <span className="text-amber-500">amber</span> within 1.5 mm ·{" "}
+              <span className="text-rose-500">red</span> off by more
+            </p>
+          </div>
         </motion.div>
 
         <motion.div

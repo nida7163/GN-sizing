@@ -1088,7 +1088,7 @@ export default function Size() {
     restoreForRetake,
   } = useSizing();
 
-  const [refIdx, setRefIdx] = useState(1); // default: Quarter; lifted so it persists across fingers
+  const [refIdx, setRefIdx] = useState(2); // default: Credit card; lifted so it persists across fingers
 
   const hasSavedProgress = state.hand !== null || Object.keys(state.measurements).length > 0;
   const resumeLabel      = getResumeLabel(state);
