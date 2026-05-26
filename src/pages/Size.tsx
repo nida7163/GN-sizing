@@ -394,6 +394,10 @@ function MeasureStep({
     onSetFingerImage(finger, url);
     setPhotoUrl(url);
 
+    console.log("[Grippy] supabaseConfigured:", supabaseConfigured);
+    console.log("[Grippy] VITE_SUPABASE_URL:", import.meta.env.VITE_SUPABASE_URL);
+    console.log("[Grippy] VITE_SUPABASE_PUBLISHABLE_KEY:", import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ? "set" : "missing");
+
     if (!supabaseConfigured) {
       setPhase("calibrate");
       return;
@@ -401,6 +405,7 @@ function MeasureStep({
 
     setPhase("analyzing");
     try {
+      console.log("[Grippy] calling analyzeNailPhoto...");
       const analysis = await analyzeNailPhoto(file, REF_OBJECTS[refIdx].label);
 
       // Convert 0-1 fractions → pixel coordinates using natural image dimensions
