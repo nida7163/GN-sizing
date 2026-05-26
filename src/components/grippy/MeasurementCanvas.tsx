@@ -52,11 +52,16 @@ export function MeasurementCanvas({
   // ── Commit timer — tracked so we can cancel it on undo/reset/unmount ─────
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Ref copy of pixelsPerMm so native handlers always see the latest value
+  const pixelsPerMmRef = useRef(pixelsPerMm);
+  pixelsPerMmRef.current = pixelsPerMm;
+
   // ── Gesture tracking refs ─────────────────────────────────────────────────
   const didDrag          = useRef(false);
   const dragStart        = useRef({ x: 0, y: 0 });
   const panAtDragStart   = useRef({ x: 0, y: 0 });
   const tapPos           = useRef<{ clientX: number; clientY: number } | null>(null);
+  const tapRect          = useRef<DOMRect | null>(null); // rect captured at touchstart
   const pinchStartDist   = useRef<number | null>(null);
   const pinchStartZoom   = useRef(1);
   const pinchWorldMid    = useRef({ x: 0, y: 0 });
@@ -71,15 +76,15 @@ export function MeasurementCanvas({
     };
   };
 
-  const toWorld = (clientX: number, clientY: number): Point => {
+  const toWorld = (clientX: number, clientY: number, rect?: DOMRect): Point => {
     const c     = canvasRef.current!;
-    const rect  = c.getBoundingClientRect();
-    const scale = c.width / rect.width;
+    const r     = rect ?? c.getBoundingClientRect();
+    const scale = c.width / r.width;
     const z     = zoomRef.current;
     const { x: px, y: py } = clamp(panRef.current.x, panRef.current.y, z);
     return {
-      x: px + (clientX - rect.left) * scale / z,
-      y: py + (clientY - rect.top)  * scale / z,
+      x: px + (clientX - r.left) * scale / z,
+      y: py + (clientY - r.top)  * scale / z,
     };
   };
 
@@ -127,8 +132,9 @@ export function MeasurementCanvas({
       ctx.setLineDash([6, 4]);
       ctx.stroke();
       ctx.setLineDash([]);
-      const label = pixelsPerMm
-        ? `${(Math.abs(second.x - first.x) / pixelsPerMm).toFixed(1)} mm`
+      const ppm   = pixelsPerMmRef.current;
+      const label = ppm
+        ? `${(Math.abs(second.x - first.x) / ppm).toFixed(1)} mm`
         : `${Math.round(Math.hypot(second.x - first.x, second.y - first.y))}px`;
       ctx.font      = "bold 14px 'DM Mono', monospace";
       ctx.fillStyle = lc;
@@ -150,10 +156,10 @@ export function MeasurementCanvas({
   }
 
   // ── commitTap — stored in a ref for the same reason as drawRef ───────────
-  const commitTapRef = useRef<(cx: number, cy: number) => void>(() => {});
-  commitTapRef.current = (cx: number, cy: number) => {
+  const commitTapRef = useRef<(cx: number, cy: number, rect?: DOMRect) => void>(() => {});
+  commitTapRef.current = (cx: number, cy: number, rect?: DOMRect) => {
     if (committedRef.current) return;
-    const pt   = toWorld(cx, cy);
+    const pt   = toWorld(cx, cy, rect);
     const prev = tapsRef.current;
     let next: TapState;
 
@@ -245,6 +251,7 @@ export function MeasurementCanvas({
         dragStart.current      = { x: t.clientX, y: t.clientY };
         panAtDragStart.current = { ...panRef.current };
         tapPos.current         = { clientX: t.clientX, clientY: t.clientY };
+        tapRect.current        = canvas.getBoundingClientRect(); // capture now, before viewport can shift
       }
     };
 
@@ -302,14 +309,16 @@ export function MeasurementCanvas({
         panAtDragStart.current = { ...panRef.current };
         didDrag.current        = true;
         tapPos.current         = null;
+        tapRect.current        = null;
         return;
       }
       pinchStartDist.current = null;
       if (!didDrag.current && tapPos.current) {
-        commitTapRef.current(tapPos.current.clientX, tapPos.current.clientY);
+        commitTapRef.current(tapPos.current.clientX, tapPos.current.clientY, tapRect.current ?? undefined);
       }
       didDrag.current = false;
       tapPos.current  = null;
+      tapRect.current = null;
     };
 
     canvas.addEventListener("touchstart", onTouchStart, { passive: false });
