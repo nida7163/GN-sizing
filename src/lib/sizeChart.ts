@@ -59,11 +59,11 @@ export function getClosestSize(
   const best   = distances[0];
   const second = distances[1];
 
-  // If the two closest sizes are within 1mm of each other, size up for comfort
-  // (press-ons can be filed down but not enlarged)
+  // If the two closest sizes are within 1.5mm of each other, size up for comfort
+  // (press-ons can be filed down but not enlarged — always better to go larger when unsure)
   let chosenSize = best.size;
   let sizedUp    = false;
-  if (second.distance - best.distance < 1.0) {
+  if (second.distance - best.distance < 1.5) {
     const bestIdx   = SIZE_ORDER.indexOf(best.size);
     const secondIdx = SIZE_ORDER.indexOf(second.size);
     if (secondIdx > bestIdx) {

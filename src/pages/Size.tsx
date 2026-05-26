@@ -656,13 +656,13 @@ function MeasureStep({
         </div>
 
         <div className="bg-grippy-black/5 rounded-2xl px-4 py-4 space-y-2">
-          <p className="font-unbounded text-xs font-semibold text-grippy-black">Tips:</p>
+          <p className="font-unbounded text-xs font-semibold text-grippy-black">Tips for accuracy:</p>
           <ul className="space-y-2">
             {[
               `Rest your ${label.toLowerCase()} flat on a table, nail facing up`,
-              `Place the ${REF_OBJECTS[refIdx].label.toLowerCase()} flat beside your nail — horizontally (landscape) if using a card`,
+              `Place the ${REF_OBJECTS[refIdx].label.toLowerCase()} flat beside your nail`,
               "Hold your phone directly above, pointing straight down",
-              "Get close so the nail fills most of the frame",
+              "Pinch to zoom in before tapping — this is the most important step for accuracy",
             ].map(tip => (
               <li key={tip} className="flex items-start gap-2 font-mono text-[11px] text-grippy-black/60 leading-relaxed">
                 <span className="text-grippy-black/30 mt-0.5 shrink-0">—</span>
@@ -797,7 +797,7 @@ function MeasureStep({
 
       <div className="flex items-center justify-between">
         <span className="font-mono text-[11px] text-grippy-black/50">
-          Tap the <span className="text-grippy-black font-medium">widest point</span> near the base of your {label} nail
+          Zoom in, then tap <span className="text-grippy-black font-medium">where nail meets skin</span> on each side at the widest point
         </span>
         <button
           onClick={handleRetakePhoto}
@@ -814,6 +814,7 @@ function MeasureStep({
         onMeasure={handleMeasureAttempt}
         onImageError={handleRetakePhoto}
         lineColor="#0D0D0D"
+        pixelsPerMm={fingerCalibrations[finger]?.pixelsPerMm}
       />
 
       <AnimatePresence>
