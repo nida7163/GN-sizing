@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, ShoppingBag, Share2 } from "lucide-react";
 import { ResultCard } from "@/components/grippy/ResultCard";
 import { GrippyButton } from "@/components/grippy/Button";
+import { AuthModal } from "@/components/grippy/AuthModal";
 import { SizeKey, NailShape, shapeLabels, fingerOrder, fingerLabels, sizeCharts } from "@/lib/sizeChart";
 import type { FingerName } from "@/lib/sizeChart";
 import type { MeasurementMap } from "@/hooks/use-sizing";
+import { saveSizingSession } from "@/lib/grippy-supabase";
 
 interface GrippyResult {
   size: SizeKey;
@@ -20,11 +22,16 @@ interface GrippyResult {
   shape: NailShape;
 }
 
+type SaveStatus = "idle" | "saving" | "saved" | "error";
+
 export default function Results() {
   const navigate      = useNavigate();
   const [searchParams] = useSearchParams();
-  const [result, setResult] = useState<GrippyResult | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [result,     setResult]     = useState<GrippyResult | null>(null);
+  const [copied,     setCopied]     = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [showAuth,   setShowAuth]   = useState(false);
+  const savedRef = useRef(false);
 
   useEffect(() => {
     // 1. URL params → gifter opening a shared link
@@ -73,6 +80,15 @@ export default function Results() {
       navigate("/size");
     }
   }, [navigate, searchParams]);
+
+  // Auto-save to Supabase when a real result loads (not shared view, not already saved)
+  useEffect(() => {
+    if (!result || result.isSharedView || savedRef.current) return;
+    savedRef.current = true;
+    setSaveStatus("saving");
+    saveSizingSession(result.hand, result.size, result.confidence, result.measurements, result.shape)
+      .then(({ error }) => setSaveStatus(error ? "error" : "saved"));
+  }, [result]);
 
   const handleRetake = (finger: FingerName) => {
     if (!result) return;
@@ -266,6 +282,8 @@ export default function Results() {
   // ── Normal / gift-recipient view ──────────────────────────────────────────
   return (
     <div className="min-h-screen grippy-surface flex flex-col">
+      <AuthModal open={showAuth} onClose={() => setShowAuth(false)} />
+
       {/* Nav */}
       <div className="flex items-center justify-between px-6 pt-safe pb-4 sticky top-0 z-10 bg-grippy-cream/80 backdrop-blur-sm">
         <button
@@ -276,17 +294,28 @@ export default function Results() {
           Resize
         </button>
         <span className="font-unbounded text-xs font-black text-grippy-cobalt tracking-tight">GRIPPY FIT</span>
-        <button
-          onClick={handleShare}
-          className="text-grippy-black/50 active:text-grippy-black transition-colors"
-          title={copied ? "Copied!" : undefined}
-        >
-          {copied ? (
-            <span className="font-mono text-[10px] text-grippy-black/50">Copied!</span>
-          ) : (
-            <Share2 size={18} />
+        <div className="flex items-center gap-3">
+          {saveStatus === "saving" && (
+            <span className="font-mono text-[10px] text-grippy-black/30">Saving…</span>
           )}
-        </button>
+          {saveStatus === "saved" && (
+            <span className="font-mono text-[10px] text-emerald-500">Saved ✓</span>
+          )}
+          {saveStatus === "error" && (
+            <span className="font-mono text-[10px] text-rose-400">Save failed</span>
+          )}
+          <button
+            onClick={handleShare}
+            className="text-grippy-black/50 active:text-grippy-black transition-colors"
+            title={copied ? "Copied!" : undefined}
+          >
+            {copied ? (
+              <span className="font-mono text-[10px] text-grippy-black/50">Copied!</span>
+            ) : (
+              <Share2 size={18} />
+            )}
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 flex flex-col gap-5 px-6 pt-6 pb-safe">
@@ -415,8 +444,15 @@ export default function Results() {
         </motion.div>
 
         <button
+          onClick={() => setShowAuth(true)}
+          className="text-center font-mono text-xs text-grippy-black/50 active:text-grippy-black/80 transition-colors mt-1"
+        >
+          Email me my size →
+        </button>
+
+        <button
           onClick={() => navigate("/size")}
-          className="text-center font-mono text-xs text-grippy-black/40 underline underline-offset-4 mt-2"
+          className="text-center font-mono text-xs text-grippy-black/40 underline underline-offset-4 mt-1"
         >
           Take measurements again
         </button>
