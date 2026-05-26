@@ -11,6 +11,8 @@ import { useSizing } from "@/hooks/use-sizing";
 import type { Point, MeasurementPointsMap, FingerImagesMap, FingerCalibrationsMap, MeasurementMap } from "@/hooks/use-sizing";
 import { fingerOrder, fingerLabels, getClosestSize, sizeCharts, NailShape } from "@/lib/sizeChart";
 import type { FingerName, SizeKey } from "@/lib/sizeChart";
+import { analyzeNailPhoto } from "@/lib/analyze-nail";
+import { supabaseConfigured } from "@/integrations/supabase/client";
 
 const PROGRESS_TOTAL = 8; // 0=Landing, 1=Hand, 2=Shape, 3–7=Thumb–Pinky
 
@@ -337,7 +339,7 @@ function ShapeStep({ onSelect }: { onSelect: (shape: NailShape) => void }) {
 }
 
 // ── Step 3: Per-finger photo → calibrate → measure ────────────────────────────
-type FingerPhase = "photo" | "calibrate" | "measure";
+type FingerPhase = "photo" | "analyzing" | "calibrate" | "measure";
 
 const SIZE_ORDER: SizeKey[] = ["XS", "S", "M", "L"];
 
@@ -387,11 +389,40 @@ function MeasureStep({
   const [measureWarn, setMeasureWarn] = useState<{ mm: number; dist: number; left: Point; right: Point } | null>(null);
   const [calWarn,     setCalWarn]     = useState<{ dist: number; left: Point; right: Point } | null>(null);
 
-  const handlePhoto = (file: File) => {
+  const handlePhoto = async (file: File) => {
     const url = URL.createObjectURL(file);
     onSetFingerImage(finger, url);
     setPhotoUrl(url);
-    setPhase("calibrate");
+
+    if (!supabaseConfigured) {
+      setPhase("calibrate");
+      return;
+    }
+
+    setPhase("analyzing");
+    try {
+      const analysis = await analyzeNailPhoto(file, REF_OBJECTS[refIdx].label);
+
+      // Convert 0-1 fractions → pixel coordinates using natural image dimensions
+      const img = new Image();
+      await new Promise<void>(res => { img.onload = () => res(); img.src = url; });
+      const W = img.naturalWidth;
+      const H = img.naturalHeight;
+      const y = analysis.nail_y * H;
+
+      const refLeft  = { x: analysis.ref_left  * W, y };
+      const refRight = { x: analysis.ref_right * W, y };
+      const nailLeft  = { x: analysis.nail_left  * W, y };
+      const nailRight = { x: analysis.nail_right * W, y };
+
+      onCalibrate(finger, refLeft, refRight, REF_OBJECTS[refIdx].mm);
+      const distPx = Math.abs(nailRight.x - nailLeft.x);
+      onMeasure(currentFinger, distPx, nailLeft, nailRight);
+      // onMeasure advances currentFinger → component remounts for next finger
+    } catch (err) {
+      console.warn("[Grippy] AI detection failed, falling back to manual:", err);
+      setPhase("calibrate");
+    }
   };
 
   const commitCalibrate = (left: Point, right: Point) => {
@@ -674,6 +705,38 @@ function MeasureStep({
         </div>
 
         <UploadCard onFile={handlePhoto} />
+      </div>
+    );
+  }
+
+  // ── Phase: analyzing ─────────────────────────────────────────────────────
+  if (phase === "analyzing") {
+    return (
+      <div className="flex flex-col gap-6 px-5 pt-8">
+        <div className="space-y-1">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
+            Finger {currentFinger + 1} of 5
+          </p>
+          <h2 className="font-unbounded text-xl font-bold text-grippy-black">
+            Analyzing…
+          </h2>
+        </div>
+        <div className="flex flex-col items-center justify-center gap-4 py-16">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            className="w-10 h-10 rounded-full border-2 border-grippy-black/10 border-t-grippy-black"
+          />
+          <p className="font-mono text-sm text-grippy-black/50 text-center">
+            AI is finding your nail edges…
+          </p>
+          <button
+            onClick={() => setPhase("calibrate")}
+            className="font-mono text-[11px] text-grippy-black/30 underline underline-offset-2 active:text-grippy-black/60"
+          >
+            Tap manually instead
+          </button>
+        </div>
       </div>
     );
   }
