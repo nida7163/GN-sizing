@@ -848,7 +848,7 @@ function MeasureStep({
             className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-4 space-y-3"
           >
             <p className="font-mono text-xs text-amber-800 leading-relaxed">
-              That measures {measureWarn.mm.toFixed(1)} mm — typical nails are 8–20 mm wide. Did you tap the right spots?
+              That measures {measureWarn.mm.toFixed(1)} mm — typical nail widths are 7–17 mm (thumb is widest, pinky narrowest). Did you tap the right spots?
             </p>
             <div className="flex gap-2">
               <button
