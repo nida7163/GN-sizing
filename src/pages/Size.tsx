@@ -61,7 +61,7 @@ function NailShapeIcon({ shape }: { shape: NailShape }) {
 }
 
 // ── Frozen canvas: static measurement overlay for review ─────────────────────
-function FrozenCanvas({ imageUrl, left, right }: { imageUrl: string; left: Point; right: Point }) {
+function FrozenCanvas({ imageUrl, left, right, pixelsPerMm }: { imageUrl: string; left: Point; right: Point; pixelsPerMm?: number }) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -90,10 +90,10 @@ function FrozenCanvas({ imageUrl, left, right }: { imageUrl: string; left: Point
       ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
       ctx.font = "bold 13px 'DM Mono', monospace";
       ctx.fillStyle = "#0D0D0D"; ctx.textAlign = "center";
-      ctx.fillText(
-        `${Math.round(Math.hypot(right.x - left.x, right.y - left.y))}px`,
-        (left.x + right.x) / 2, (left.y + right.y) / 2 - 14,
-      );
+      const widthLabel = pixelsPerMm
+        ? `${(Math.abs(right.x - left.x) / pixelsPerMm).toFixed(1)} mm`
+        : `${Math.round(Math.hypot(right.x - left.x, right.y - left.y))}px`;
+      ctx.fillText(widthLabel, (left.x + right.x) / 2, (left.y + right.y) / 2 - 14);
     };
     img.src = imageUrl;
   }, [imageUrl, left, right]);
@@ -402,7 +402,9 @@ function MeasureStep({
   const handleCalibrateAttempt = (_dist: number, left: Point, right: Point) => {
     const pixelWidth  = Math.abs(right.x - left.x);
     const pixelsPerMm = pixelWidth / REF_OBJECTS[refIdx].mm;
-    if (pixelsPerMm < 0.5 || pixelsPerMm > 30) {
+    // Reject if the tap distance looks like a nail (< 1.5 px/mm means the card
+    // was only ~130px wide, far too narrow — user likely tapped the finger)
+    if (pixelsPerMm < 1.5 || pixelsPerMm > 30) {
       setCalWarn({ dist: _dist, left, right });
     } else {
       commitCalibrate(left, right);
@@ -575,8 +577,16 @@ function MeasureStep({
             )}
 
             {/* Photo overlay if available in this session */}
+            {/* -mx-4 cancels the px-4 on this panel so FrozenCanvas matches the measurement canvas width exactly */}
             {reviewPts && reviewImg && (
-              <FrozenCanvas imageUrl={reviewImg} left={reviewPts.left} right={reviewPts.right} />
+              <div className="-mx-4">
+                <FrozenCanvas
+                  imageUrl={reviewImg}
+                  left={reviewPts.left}
+                  right={reviewPts.right}
+                  pixelsPerMm={fingerCalibrations[reviewFinger!]?.pixelsPerMm}
+                />
+              </div>
             )}
           </div>
         </motion.div>
