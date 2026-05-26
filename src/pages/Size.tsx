@@ -1,5 +1,5 @@
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Gift, Hand, Link, Undo2 } from "lucide-react";
 import { GrippyButton } from "@/components/grippy/Button";
@@ -60,50 +60,6 @@ function NailShapeIcon({ shape }: { shape: NailShape }) {
   );
 }
 
-// ── Frozen canvas: static measurement overlay for review ─────────────────────
-function FrozenCanvas({ imageUrl, left, right, pixelsPerMm }: { imageUrl: string; left: Point; right: Point; pixelsPerMm?: number }) {
-  const canvasRef    = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas    = canvasRef.current;
-      const container = containerRef.current;
-      if (!canvas || !container) return;
-      const maxW    = container.clientWidth;
-      canvas.width  = maxW;
-      canvas.height = maxW * (img.naturalHeight / img.naturalWidth);
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const drawMarker = (p: Point) => {
-        ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
-        ctx.fillStyle = "#0D0D0D"; ctx.globalAlpha = 0.25; ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-        ctx.fillStyle = "#0D0D0D"; ctx.fill();
-      };
-      drawMarker(left);
-      drawMarker(right);
-      ctx.beginPath(); ctx.moveTo(left.x, left.y); ctx.lineTo(right.x, right.y);
-      ctx.strokeStyle = "#0D0D0D"; ctx.lineWidth = 2.5;
-      ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
-      ctx.font = "bold 13px 'DM Mono', monospace";
-      ctx.fillStyle = "#0D0D0D"; ctx.textAlign = "center";
-      const widthLabel = pixelsPerMm
-        ? `${(Math.abs(right.x - left.x) / pixelsPerMm).toFixed(1)} mm`
-        : `${Math.round(Math.hypot(right.x - left.x, right.y - left.y))}px`;
-      ctx.fillText(widthLabel, (left.x + right.x) / 2, (left.y + right.y) / 2 - 14);
-    };
-    img.src = imageUrl;
-  }, [imageUrl, left, right]);
-
-  return (
-    <div ref={containerRef} className="w-full rounded-xl overflow-hidden bg-grippy-black shadow-md">
-      <canvas ref={canvasRef} className="w-full" />
-    </div>
-  );
-}
 
 // ── Step 0: Landing ───────────────────────────────────────────────────────────
 const STEPS_PREVIEW = [
@@ -353,6 +309,8 @@ function MeasureStep({
   onCalibrate,
   onMeasure,
   onUndo,
+  onUpdateMeasurement,
+  onRecalibrate,
 }: {
   currentFinger: number;
   fingerImages: FingerImagesMap;
@@ -366,6 +324,8 @@ function MeasureStep({
   onCalibrate: (finger: FingerName, left: Point, right: Point, referenceMm?: number) => void;
   onMeasure: (fingerIdx: number, distPx: number, left: Point, right: Point) => void;
   onUndo: () => void;
+  onUpdateMeasurement: (finger: FingerName, left: Point, right: Point) => void;
+  onRecalibrate: (finger: FingerName, cardLeft: Point, cardRight: Point, referenceMm: number) => void;
 }) {
   const finger = fingerOrder[currentFinger];
   const label  = fingerLabels[finger];
@@ -381,10 +341,13 @@ function MeasureStep({
 
   const [photoUrl,     setPhotoUrl]    = useState<string | null>(fingerImages[finger] ?? null);
   const [reviewIdx,    setReviewIdx]   = useState<number | null>(null);
+  const [reviewTab,    setReviewTab]   = useState<"nail" | "card">("nail");
   const [canvasKey,    setCanvasKey]   = useState(0);
   const [calCanvasKey, setCalCanvasKey] = useState(0);
   const [measureWarn,  setMeasureWarn] = useState<{ mm: number; dist: number; left: Point; right: Point } | null>(null);
   const [calWarn,      setCalWarn]     = useState<{ dist: number; left: Point; right: Point } | null>(null);
+
+  useEffect(() => { setReviewTab("nail"); }, [reviewIdx]);
 
   const handlePhoto = (file: File) => {
     const url = URL.createObjectURL(file);
@@ -588,17 +551,53 @@ function MeasureStep({
               </div>
             )}
 
-            {/* Photo overlay if available in this session */}
-            {/* -mx-4 cancels the px-4 on this panel so FrozenCanvas matches the measurement canvas width exactly */}
-            {reviewPts && reviewImg && (
-              <div className="-mx-4">
-                <FrozenCanvas
-                  imageUrl={reviewImg}
-                  left={reviewPts.left}
-                  right={reviewPts.right}
-                  pixelsPerMm={fingerCalibrations[reviewFinger!]?.pixelsPerMm}
-                />
+            {/* Live re-tappable canvases for nail edges and card edges */}
+            {/* -mx-4 cancels the px-4 on this panel so canvases match measurement canvas width exactly */}
+            {reviewImg ? (
+              <div className="-mx-4 space-y-3">
+                <div className="flex gap-2 px-4">
+                  {(["nail", "card"] as const).map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => setReviewTab(tab)}
+                      className={[
+                        "px-3 py-1.5 rounded-full font-mono text-[10px] border transition-all",
+                        tab === reviewTab
+                          ? "bg-grippy-black text-grippy-cream border-grippy-black"
+                          : "bg-transparent text-grippy-black/50 border-grippy-black/20 active:border-grippy-black",
+                      ].join(" ")}
+                    >
+                      {tab === "nail" ? "Nail edges" : "Card edges"}
+                    </button>
+                  ))}
+                </div>
+                {reviewTab === "nail" && reviewPts && (
+                  <MeasurementCanvas
+                    key={`review-nail-${reviewIdx}`}
+                    imageUrl={reviewImg}
+                    prompt={`Retap the widest part of your ${fingerLabels[reviewFinger!]} nail`}
+                    lineColor="#0D0D0D"
+                    pixelsPerMm={fingerCalibrations[reviewFinger!]?.pixelsPerMm}
+                    initialFirst={reviewPts.left}
+                    initialSecond={reviewPts.right}
+                    onMeasure={(_, left, right) => onUpdateMeasurement(reviewFinger!, left, right)}
+                  />
+                )}
+                {reviewTab === "card" && fingerCalibrations[reviewFinger!] && (
+                  <MeasurementCanvas
+                    key={`review-card-${reviewIdx}`}
+                    imageUrl={reviewImg}
+                    prompt={`Retap the edges of the ${REF_OBJECTS[refIdx].label.toLowerCase()}`}
+                    initialFirst={fingerCalibrations[reviewFinger!]!.left}
+                    initialSecond={fingerCalibrations[reviewFinger!]!.right}
+                    onMeasure={(_, left, right) => onRecalibrate(reviewFinger!, left, right, REF_OBJECTS[refIdx].mm)}
+                  />
+                )}
               </div>
+            ) : reviewPts && (
+              <p className="font-mono text-[11px] text-grippy-black/40 text-center py-2">
+                Photo not available after reload — retake to adjust
+              </p>
             )}
           </div>
         </motion.div>
@@ -885,6 +884,8 @@ export default function Size() {
     setFingerCalibration,
     recordMeasurement,
     undoMeasurement,
+    updateMeasurementForFinger,
+    recalibrateFinger,
     getMeasurementArray,
     reset,
     resume,
@@ -1011,6 +1012,8 @@ export default function Size() {
                   onCalibrate={setFingerCalibration}
                   onMeasure={recordMeasurement}
                   onUndo={undoMeasurement}
+                  onUpdateMeasurement={updateMeasurementForFinger}
+                  onRecalibrate={recalibrateFinger}
                 />
               </PageContainer>
             )}

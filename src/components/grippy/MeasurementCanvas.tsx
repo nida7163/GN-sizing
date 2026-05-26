@@ -10,6 +10,8 @@ interface MeasurementCanvasProps {
   lineColor?: string;
   onImageError?: () => void;
   pixelsPerMm?: number; // when provided, show mm readout instead of px
+  initialFirst?: Point;  // pre-populate first dot (review/re-measure mode)
+  initialSecond?: Point; // pre-populate second dot
 }
 
 type TapState = { first: Point | null; second: Point | null };
@@ -21,6 +23,8 @@ export function MeasurementCanvas({
   lineColor = "#0D0D0D",
   onImageError,
   pixelsPerMm,
+  initialFirst,
+  initialSecond,
 }: MeasurementCanvasProps) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const imageRef     = useRef<HTMLImageElement | null>(null);
@@ -29,14 +33,14 @@ export function MeasurementCanvas({
   // ── State (drives JSX re-renders) ─────────────────────────────────────────
   const [zoom,       setZoom]       = useState(1);
   const [pan,        setPan]        = useState({ x: 0, y: 0 });
-  const [taps,       setTaps]       = useState<TapState>({ first: null, second: null });
+  const [taps,       setTaps]       = useState<TapState>({ first: initialFirst ?? null, second: initialSecond ?? null });
   const [committed,  setCommitted]  = useState(false);
   const [imgFailed,  setImgFailed]  = useState(false);
 
   // ── Refs mirroring state — always current, safe to read in native listeners
   const zoomRef      = useRef(1);
   const panRef       = useRef({ x: 0, y: 0 });
-  const tapsRef      = useRef<TapState>({ first: null, second: null });
+  const tapsRef      = useRef<TapState>({ first: initialFirst ?? null, second: initialSecond ?? null });
   const committedRef = useRef(false);
   const lineColorRef = useRef(lineColor);
   const onMeasureRef = useRef(onMeasure);
@@ -371,9 +375,10 @@ export function MeasurementCanvas({
   };
 
   const isZoomed  = zoom > 1;
-  const hintText  = !taps.first ? (isZoomed ? "Tap the left edge" : "Pinch to zoom in first, then tap the left edge")
-    : !taps.second              ? "Now tap the right edge"
-    :                             "Measuring…";
+  const hintText  = committed ? "Tap Undo to adjust"
+    : !taps.first ? (isZoomed ? "Tap the left edge" : "Pinch to zoom in first, then tap the left edge")
+    : !taps.second ? "Now tap the right edge"
+    : "Measuring…";
 
   return (
     <div className="w-full flex flex-col gap-3">

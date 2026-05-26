@@ -141,6 +141,39 @@ export function useSizing() {
     });
   }, []);
 
+  const updateMeasurementForFinger = useCallback((finger: FingerName, left: Point, right: Point) => {
+    setState(s => {
+      const pixelsPerMm = s.fingerCalibrations[finger]?.pixelsPerMm ?? 5;
+      const widthPx     = Math.abs(right.x - left.x);
+      const widthMm     = pixelsToMm(widthPx, pixelsPerMm);
+      return {
+        ...s,
+        measurements:      { ...s.measurements,      [finger]: widthMm },
+        measurementPoints: { ...s.measurementPoints, [finger]: { left, right } },
+      };
+    });
+  }, []);
+
+  const recalibrateFinger = useCallback((finger: FingerName, cardLeft: Point, cardRight: Point, referenceMm = 20) => {
+    setState(s => {
+      const pixelWidth  = Math.abs(cardRight.x - cardLeft.x);
+      const pixelsPerMm = pixelWidth > 0 ? pixelWidth / referenceMm : 5;
+      const cal: CalibrationData = { left: cardLeft, right: cardRight, pixelsPerMm };
+      const pts = s.measurementPoints[finger];
+      const newMeasurements = { ...s.measurements };
+      if (pts) {
+        const nailWidthPx       = Math.abs(pts.right.x - pts.left.x);
+        newMeasurements[finger] = pixelsToMm(nailWidthPx, pixelsPerMm);
+      }
+      return {
+        ...s,
+        calibration:        cal,
+        fingerCalibrations: { ...s.fingerCalibrations, [finger]: cal },
+        measurements:       newMeasurements,
+      };
+    });
+  }, []);
+
   // Clears localStorage immediately — don't wait for the persistence effect.
   const reset = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
@@ -185,6 +218,8 @@ export function useSizing() {
     setFingerCalibration,
     recordMeasurement,
     undoMeasurement,
+    updateMeasurementForFinger,
+    recalibrateFinger,
     getMeasurementArray,
     reset,
     resume,
