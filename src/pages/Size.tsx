@@ -486,7 +486,19 @@ function MeasureStep({
         diff: reviewMm - sizeCharts[shape][sz][reviewIdx!],
       })).sort((a, b) => Math.abs(a.diff) - Math.abs(b.diff))
     : null;
-  const closestSize = fingerSizeRanking?.[0]?.size ?? null;
+  // Apply the same size-up rule as getClosestSize: if the two closest sizes are within
+  // 1.5 mm of each other, prefer the larger one (press-ons file down, not up).
+  const closestSize = (() => {
+    if (!fingerSizeRanking || fingerSizeRanking.length < 2) return fingerSizeRanking?.[0]?.size ?? null;
+    const best   = fingerSizeRanking[0];
+    const second = fingerSizeRanking[1];
+    if (Math.abs(second.diff) - Math.abs(best.diff) < 1.5) {
+      const bestIdx   = SIZE_ORDER.indexOf(best.size);
+      const secondIdx = SIZE_ORDER.indexOf(second.size);
+      if (secondIdx > bestIdx) return second.size;
+    }
+    return best.size;
+  })();
 
   const reviewPanel = (
     <AnimatePresence>
