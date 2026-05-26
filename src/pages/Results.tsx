@@ -171,7 +171,8 @@ export default function Results() {
   // ── Shared view (gifter opening a gift link) ──────────────────────────────
   if (result.isSharedView) {
     return (
-      <div className="min-h-screen grippy-surface flex flex-col">
+      <div className="min-h-screen grippy-surface">
+        <div className="max-w-md mx-auto min-h-screen flex flex-col">
         <div className="flex items-center justify-between px-6 pt-safe pb-4 sticky top-0 z-10 bg-grippy-cream/80 backdrop-blur-sm">
           <span className="font-unbounded text-xs font-black text-grippy-cobalt tracking-tight">GRIPPY FIT</span>
           <button
@@ -292,13 +293,15 @@ export default function Results() {
             </button>
           </motion.div>
         </div>
+        </div>
       </div>
     );
   }
 
   // ── Normal / gift-recipient view ──────────────────────────────────────────
   return (
-    <div className="min-h-screen grippy-surface flex flex-col">
+    <div className="min-h-screen grippy-surface">
+      <div className="max-w-md mx-auto min-h-screen flex flex-col">
       <AuthModal open={showAuth} onClose={() => setShowAuth(false)} />
 
       {/* Nav */}
@@ -489,6 +492,7 @@ export default function Results() {
         >
           Take measurements again
         </button>
+      </div>
       </div>
     </div>
   );
