@@ -14,20 +14,9 @@ export async function saveSizingSession(
     return { sessionId: null, error: "Supabase not configured" };
   }
 
-  const { data: profile, error: profileErr } = await supabase
-    .from("profiles")
-    .insert({ user_id: userId ?? null })
-    .select("id")
-    .single();
-
-  if (profileErr || !profile) {
-    return { sessionId: null, error: profileErr?.message ?? "Failed to create profile" };
-  }
-
   const { data: session, error: sessionErr } = await supabase
     .from("sizing_sessions")
     .insert({
-      profile_id: profile.id,
       hand,
       recommended_size: size,
       confidence,
@@ -38,19 +27,21 @@ export async function saveSizingSession(
     .single();
 
   if (sessionErr || !session) {
+    console.error("[Grippy] sizing_sessions insert failed:", sessionErr?.message);
     return { sessionId: null, error: sessionErr?.message ?? "Failed to save session" };
   }
 
   const { error: measErr } = await supabase.from("measurements").insert({
     session_id: session.id,
-    thumb: measurements.thumb ?? null,
-    index_finger: measurements.index ?? null,
-    middle_finger: measurements.middle ?? null,
-    ring_finger: measurements.ring ?? null,
-    pinky: measurements.pinky ?? null,
+    thumb:         measurements.thumb        ?? null,
+    index_finger:  measurements.index        ?? null,
+    middle_finger: measurements.middle       ?? null,
+    ring_finger:   measurements.ring         ?? null,
+    pinky:         measurements.pinky        ?? null,
   });
 
   if (measErr) {
+    console.error("[Grippy] measurements insert failed:", measErr.message);
     return { sessionId: session.id, error: measErr.message };
   }
 
