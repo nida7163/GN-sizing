@@ -338,8 +338,81 @@ function ShapeStep({ onSelect }: { onSelect: (shape: NailShape) => void }) {
   );
 }
 
+// ── AI review canvas: shows photo with AI-detected ref + nail markers ────────
+function AIReviewCanvas({
+  imageUrl,
+  refLeft,
+  refRight,
+  nailLeft,
+  nailRight,
+}: {
+  imageUrl: string;
+  refLeft: Point;
+  refRight: Point;
+  nailLeft: Point;
+  nailRight: Point;
+}) {
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas    = canvasRef.current;
+      const container = containerRef.current;
+      if (!canvas || !container) return;
+      const maxW    = container.clientWidth;
+      canvas.width  = maxW;
+      canvas.height = maxW * (img.naturalHeight / img.naturalWidth);
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      const scaleX = canvas.width  / img.naturalWidth;
+      const scaleY = canvas.height / img.naturalHeight;
+      const scale  = (p: Point) => ({ x: p.x * scaleX, y: p.y * scaleY });
+
+      const drawPair = (l: Point, r: Point, color: string, label: string) => {
+        const sl = scale(l);
+        const sr = scale(r);
+        const drawMarker = (p: { x: number; y: number }) => {
+          ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+          ctx.fillStyle = color; ctx.globalAlpha = 0.25; ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = color; ctx.fill();
+        };
+        drawMarker(sl);
+        drawMarker(sr);
+        ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sr.x, sr.y);
+        ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+        ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+        ctx.font = "bold 12px 'DM Mono', monospace";
+        ctx.fillStyle = color; ctx.textAlign = "center";
+        ctx.fillText(label, (sl.x + sr.x) / 2, (sl.y + sr.y) / 2 - 12);
+      };
+
+      drawPair(refLeft,  refRight,  "#0066FF", "reference");
+      drawPair(nailLeft, nailRight, "#0D0D0D", "nail");
+    };
+    img.src = imageUrl;
+  }, [imageUrl, refLeft, refRight, nailLeft, nailRight]);
+
+  return (
+    <div ref={containerRef} className="w-full rounded-2xl overflow-hidden bg-grippy-black shadow-xl">
+      <canvas ref={canvasRef} className="w-full" />
+    </div>
+  );
+}
+
 // ── Step 3: Per-finger photo → calibrate → measure ────────────────────────────
-type FingerPhase = "photo" | "analyzing" | "calibrate" | "measure";
+type FingerPhase = "photo" | "analyzing" | "review" | "calibrate" | "measure";
+
+interface AIResult {
+  refLeft:   Point;
+  refRight:  Point;
+  nailLeft:  Point;
+  nailRight: Point;
+}
 
 const SIZE_ORDER: SizeKey[] = ["XS", "S", "M", "L"];
 
@@ -388,6 +461,7 @@ function MeasureStep({
   const [calCanvasKey, setCalCanvasKey] = useState(0);
   const [measureWarn, setMeasureWarn] = useState<{ mm: number; dist: number; left: Point; right: Point } | null>(null);
   const [calWarn,     setCalWarn]     = useState<{ dist: number; left: Point; right: Point } | null>(null);
+  const [aiResult,    setAiResult]    = useState<AIResult | null>(null);
 
   const handlePhoto = async (file: File) => {
     const url = URL.createObjectURL(file);
@@ -415,19 +489,30 @@ function MeasureStep({
       const H = img.naturalHeight;
       const y = analysis.nail_y * H;
 
-      const refLeft  = { x: analysis.ref_left  * W, y };
-      const refRight = { x: analysis.ref_right * W, y };
-      const nailLeft  = { x: analysis.nail_left  * W, y };
-      const nailRight = { x: analysis.nail_right * W, y };
-
-      onCalibrate(finger, refLeft, refRight, REF_OBJECTS[refIdx].mm);
-      const distPx = Math.abs(nailRight.x - nailLeft.x);
-      onMeasure(currentFinger, distPx, nailLeft, nailRight);
-      // onMeasure advances currentFinger → component remounts for next finger
+      setAiResult({
+        refLeft:   { x: analysis.ref_left   * W, y },
+        refRight:  { x: analysis.ref_right  * W, y },
+        nailLeft:  { x: analysis.nail_left  * W, y },
+        nailRight: { x: analysis.nail_right * W, y },
+      });
+      setPhase("review");
     } catch (err) {
       console.warn("[Grippy] AI detection failed, falling back to manual:", err);
       setPhase("calibrate");
     }
+  };
+
+  const handleAcceptAI = () => {
+    if (!aiResult) return;
+    onCalibrate(finger, aiResult.refLeft, aiResult.refRight, REF_OBJECTS[refIdx].mm);
+    const distPx = Math.abs(aiResult.nailRight.x - aiResult.nailLeft.x);
+    onMeasure(currentFinger, distPx, aiResult.nailLeft, aiResult.nailRight);
+    setAiResult(null);
+  };
+
+  const handleRejectAI = () => {
+    setAiResult(null);
+    setPhase("calibrate");
   };
 
   const commitCalibrate = (left: Point, right: Point) => {
@@ -740,6 +825,72 @@ function MeasureStep({
             className="font-mono text-[11px] text-grippy-black/30 underline underline-offset-2 active:text-grippy-black/60"
           >
             Tap manually instead
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Phase: review AI detection ───────────────────────────────────────────
+  if (phase === "review" && aiResult && photoUrl) {
+    const refPx       = Math.abs(aiResult.refRight.x  - aiResult.refLeft.x);
+    const nailPx      = Math.abs(aiResult.nailRight.x - aiResult.nailLeft.x);
+    const pixelsPerMm = refPx / REF_OBJECTS[refIdx].mm;
+    const nailMm      = nailPx / pixelsPerMm;
+    const looksReasonable = nailMm >= 5 && nailMm <= 25;
+
+    return (
+      <div className="flex flex-col gap-6 px-5 pt-8">
+        <div className="space-y-1">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
+            Finger {currentFinger + 1} of 5
+          </p>
+          <h2 className="font-unbounded text-xl font-bold text-grippy-black">
+            Does this look right?
+          </h2>
+          <p className="font-mono text-sm text-grippy-black/50 pt-1">
+            Blue = {REF_OBJECTS[refIdx].label.toLowerCase()} • Black = nail edges
+          </p>
+        </div>
+
+        <AIReviewCanvas
+          imageUrl={photoUrl}
+          refLeft={aiResult.refLeft}
+          refRight={aiResult.refRight}
+          nailLeft={aiResult.nailLeft}
+          nailRight={aiResult.nailRight}
+        />
+
+        <div className="bg-grippy-black/[0.04] rounded-2xl px-4 py-3 flex items-center justify-between">
+          <span className="font-mono text-xs text-grippy-black/60">AI estimate:</span>
+          <span className="font-unbounded text-lg font-bold text-grippy-black tabular-nums">
+            {nailMm.toFixed(1)} mm
+          </span>
+        </div>
+
+        {!looksReasonable && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+            <p className="font-mono text-xs text-amber-800 leading-relaxed">
+              That measurement looks off (typical nails are 8–20 mm). Tap manually for a better result.
+            </p>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2">
+          <GrippyButton size="lg" fullWidth onClick={handleAcceptAI}>
+            Looks correct
+          </GrippyButton>
+          <button
+            onClick={handleRejectAI}
+            className="w-full py-3 font-mono text-xs text-grippy-black/50 active:text-grippy-black underline underline-offset-2 transition-colors"
+          >
+            Tap manually instead
+          </button>
+          <button
+            onClick={handleRetakePhoto}
+            className="w-full py-2 font-mono text-[11px] text-grippy-black/35 active:text-grippy-black/60 transition-colors"
+          >
+            Retake photo
           </button>
         </div>
       </div>
