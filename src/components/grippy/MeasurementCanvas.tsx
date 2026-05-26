@@ -9,6 +9,7 @@ interface MeasurementCanvasProps {
   prompt: string;
   lineColor?: string;
   onImageError?: () => void;
+  pixelsPerMm?: number; // when provided, show mm readout instead of px
 }
 
 type TapState = { first: Point | null; second: Point | null };
@@ -19,6 +20,7 @@ export function MeasurementCanvas({
   prompt,
   lineColor = "#0D0D0D",
   onImageError,
+  pixelsPerMm,
 }: MeasurementCanvasProps) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const imageRef     = useRef<HTMLImageElement | null>(null);
@@ -125,11 +127,17 @@ export function MeasurementCanvas({
       ctx.setLineDash([6, 4]);
       ctx.stroke();
       ctx.setLineDash([]);
-      const dist = Math.hypot(second.x - first.x, second.y - first.y);
-      ctx.font      = "bold 13px 'DM Mono', monospace";
+      const label = pixelsPerMm
+        ? `${(Math.abs(second.x - first.x) / pixelsPerMm).toFixed(1)} mm`
+        : `${Math.round(Math.hypot(second.x - first.x, second.y - first.y))}px`;
+      ctx.font      = "bold 14px 'DM Mono', monospace";
       ctx.fillStyle = lc;
       ctx.textAlign = "center";
-      ctx.fillText(`${Math.round(dist)}px`, (s1.sx + s2.sx) / 2, (s1.sy + s2.sy) / 2 - 14);
+      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 4;
+      const tx = (s1.sx + s2.sx) / 2;
+      const ty = Math.min(s1.sy, s2.sy) - 14;
+      ctx.strokeText(label, tx, ty);
+      ctx.fillText(label, tx, ty);
     }
   };
 
@@ -354,7 +362,7 @@ export function MeasurementCanvas({
   };
 
   const isZoomed  = zoom > 1;
-  const hintText  = !taps.first ? "Tap the left edge"
+  const hintText  = !taps.first ? (isZoomed ? "Tap the left edge" : "Pinch to zoom in first, then tap the left edge")
     : !taps.second              ? "Now tap the right edge"
     :                             "Measuring…";
 
