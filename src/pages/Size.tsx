@@ -382,25 +382,27 @@ function AIReviewCanvas({
       const sl = scale(l);
       const sr = scale(rPt);
       const drawMarker = (p: { x: number; y: number }, isActive: boolean) => {
-        const radius = isActive ? 16 : 12;
-        ctx.beginPath(); ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-        ctx.fillStyle = color; ctx.globalAlpha = isActive ? 0.5 : 0.25; ctx.fill();
+        // Large outer halo for easy touch targeting
+        ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 28 : 22, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.globalAlpha = isActive ? 0.2 : 0.1; ctx.fill();
         ctx.globalAlpha = 1;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+        // Inner filled dot
+        ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 10 : 8, 0, Math.PI * 2);
         ctx.fillStyle = color; ctx.fill();
-        ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2; ctx.stroke();
+        // White ring
+        ctx.beginPath(); ctx.arc(p.x, p.y, isActive ? 10 : 8, 0, Math.PI * 2);
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2.5; ctx.stroke();
       };
       ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sr.x, sr.y);
       ctx.strokeStyle = color; ctx.lineWidth = 2.5;
       ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
       drawMarker(sl, active === lKey);
       drawMarker(sr, active === rKey);
-      ctx.font = "bold 12px 'DM Mono', monospace";
+      ctx.font = "bold 13px 'DM Mono', monospace";
       ctx.fillStyle = color; ctx.textAlign = "center";
-      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 3;
+      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 4;
       const tx = (sl.x + sr.x) / 2;
-      const ty = (sl.y + sr.y) / 2 - 14;
+      const ty = Math.min(sl.y, sr.y) - 18;
       ctx.strokeText(label, tx, ty);
       ctx.fillText(label, tx, ty);
     };
@@ -461,8 +463,8 @@ function AIReviewCanvas({
       const d  = Math.hypot(sx - cx, sy - cy);
       if (best === null || d < best.dist) best = { key, dist: d };
     }
-    // Only grab if within 40px of a marker
-    return best && best.dist < 40 ? best.key : null;
+    // Only grab if within 60px of a marker
+    return best && best.dist < 60 ? best.key : null;
   };
 
   // Native touch listeners so preventDefault works on iOS
@@ -993,9 +995,14 @@ function MeasureStep({
           onChange={setAiResult}
         />
 
-        <p className="font-mono text-[11px] text-grippy-black/50 text-center -mt-2">
-          Drag any dot to adjust — line up with the actual edges
-        </p>
+        <div className="bg-grippy-cobalt/10 border border-grippy-cobalt/20 rounded-xl px-4 py-2.5 -mt-2 text-center">
+          <p className="font-mono text-[11px] text-grippy-cobalt font-medium">
+            Drag the dots to line up with the actual edges
+          </p>
+          <p className="font-mono text-[10px] text-grippy-black/40 mt-0.5">
+            Blue dots = {REF_OBJECTS[refIdx].label} edges &nbsp;·&nbsp; Black dots = nail edges
+          </p>
+        </div>
 
         <div className="bg-grippy-black/[0.04] rounded-2xl px-4 py-3 flex items-center justify-between">
           <span className="font-mono text-xs text-grippy-black/60">Current estimate:</span>
