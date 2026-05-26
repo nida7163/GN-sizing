@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 export interface NailAnalysis {
   ref_left:  number; // fraction of image width
   ref_right: number;
+  ref_y:     number; // fraction of image height (vertical center of reference object)
   nail_left: number;
   nail_right: number;
   nail_y:    number; // fraction of image height
