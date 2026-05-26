@@ -27,32 +27,31 @@ Deno.serve(async (req) => {
           },
           {
             type: "text",
-            text: `You are a precision measurement assistant. This is a top-down photo of a single human finger with a ${referenceObject} placed flat on the surface next to it. Both are intended for size measurement.
+            text: `You are a precision measurement assistant. This is a top-down photo of a single human finger with a ${referenceObject} placed flat on a surface nearby. The goal is to measure the fingernail width using the ${referenceObject} as a size reference.
 
-CRITICAL CONTEXT:
-- The image coordinate system: x=0.0 is the LEFT edge of the image, x=1.0 is the RIGHT edge. y=0.0 is TOP, y=1.0 is BOTTOM.
-- The ${referenceObject} and the fingernail will be at DIFFERENT horizontal positions in the image (one is to the left of the other). They should NOT overlap.
-- Be extremely precise. Use the entire decimal range — values like 0.237 or 0.812 are normal, not just round numbers like 0.5.
+COORDINATE SYSTEM: x=0.0 is the LEFT edge of the image, x=1.0 is the RIGHT edge. y=0.0 is TOP, y=1.0 is BOTTOM.
 
-STEP 1: Describe what you see in 1–2 sentences. Where is the ${referenceObject} relative to the finger? (e.g., "card is on the left, finger on the right")
+STEP 1: Describe exactly what you see. Where is the ${referenceObject} in the image (top half? bottom half? left side? right side?)? Where is the finger?
 
-STEP 2: Locate the ${referenceObject.toUpperCase()}. Carefully study its edges.
-- ref_left  = x-fraction of the LEFTMOST visible edge of the ${referenceObject}
-- ref_right = x-fraction of the RIGHTMOST visible edge of the ${referenceObject}
-- ref_y     = y-fraction of the VERTICAL CENTER of the ${referenceObject}
+STEP 2: Locate the physical edges of the ${referenceObject.toUpperCase()}.
+The ${referenceObject} does NOT fill the entire image — there is background/surface visible around it.
+Find the exact physical edges of the ${referenceObject} itself (not the image boundary, not shadows, not reflections).
+- ref_left  = x-fraction where the ${referenceObject}'s LEFT physical edge is (this will NOT be 0.0 unless the card truly touches the left image border)
+- ref_right = x-fraction where the ${referenceObject}'s RIGHT physical edge is
+- ref_y     = y-fraction of the vertical CENTER of the ${referenceObject}
 
-STEP 3: Locate the FINGERNAIL (the pink/white nail plate, NOT the surrounding finger flesh). Find its widest point near the base of the nail (cuticle area), where it appears flattest from above.
-- nail_left  = x-fraction of the LEFT edge of the nail PLATE at its widest visible point
-- nail_right = x-fraction of the RIGHT edge of the nail PLATE at the same widest point
+STEP 3: Locate the FINGERNAIL PLATE (the smooth pink/white nail — NOT the surrounding skin or finger flesh).
+Find the widest horizontal span of the nail plate near its base (where the cuticle is), where the nail is flattest.
+- nail_left  = x-fraction of the LEFT edge of the nail plate at its widest point
+- nail_right = x-fraction of the RIGHT edge of the nail plate at that same point
 - nail_y     = y-fraction of the vertical center of that measurement line
 
-SANITY CHECK:
-- ref_left  must be < ref_right
+SANITY CHECK before finalizing:
+- ref_left must be < ref_right (and ref_left should be well above 0.05 unless card truly touches left border)
 - nail_left must be < nail_right
-- The ${referenceObject} and the nail are in DIFFERENT locations in the image — either side by side (different x positions) OR one above the other (different y positions). They should NOT be at the same location.
-- A typical fingernail is roughly 30–70% of a credit card's width, or 50–90% of a quarter's width.
+- A credit card is 86mm wide. A typical thumbnail is 15–20mm wide, an index/middle nail is 10–14mm. So the nail width should be roughly 15–25% of a credit card's pixel width.
 
-After your reasoning, output the final JSON on a SINGLE line at the very end, in this exact format:
+After your reasoning, output on ONE line at the very end:
 FINAL: {"ref_left":0.000,"ref_right":0.000,"ref_y":0.300,"nail_left":0.000,"nail_right":0.000,"nail_y":0.500}`,
           },
         ],
