@@ -9,6 +9,7 @@ import { SizeKey, NailShape, shapeLabels, fingerOrder, fingerLabels, sizeCharts 
 import type { FingerName } from "@/lib/sizeChart";
 import type { MeasurementMap } from "@/hooks/use-sizing";
 import { saveSizingSession } from "@/lib/grippy-supabase";
+import { supabaseConfigured } from "@/integrations/supabase/client";
 
 interface GrippyResult {
   size: SizeKey;
@@ -81,9 +82,9 @@ export default function Results() {
     }
   }, [navigate, searchParams]);
 
-  // Auto-save to Supabase when a real result loads (not shared view, not already saved)
+  // Auto-save to Supabase when a real result loads (only if Supabase is configured)
   useEffect(() => {
-    if (!result || result.isSharedView || savedRef.current) return;
+    if (!result || result.isSharedView || savedRef.current || !supabaseConfigured) return;
     savedRef.current = true;
     setSaveStatus("saving");
     saveSizingSession(result.hand, result.size, result.confidence, result.measurements, result.shape)

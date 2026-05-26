@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, supabaseConfigured } from "@/integrations/supabase/client";
 import { SizeKey, NailShape } from "./sizeChart";
 import { MeasurementMap } from "@/hooks/use-sizing";
 
@@ -10,6 +10,10 @@ export async function saveSizingSession(
   shape?: NailShape,
   userId?: string
 ): Promise<{ sessionId: string | null; error: string | null }> {
+  if (!supabaseConfigured || !supabase) {
+    return { sessionId: null, error: "Supabase not configured" };
+  }
+
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
     .insert({ user_id: userId ?? null })
@@ -62,6 +66,7 @@ export interface HistorySession {
 }
 
 export async function fetchHistory(userId: string): Promise<HistorySession[]> {
+  if (!supabaseConfigured || !supabase) return [];
   const { data } = await supabase
     .from("sizing_sessions")
     .select("id, created_at, recommended_size, shape, hand")
@@ -72,6 +77,7 @@ export async function fetchHistory(userId: string): Promise<HistorySession[]> {
 }
 
 export async function fetchSession(sessionId: string) {
+  if (!supabaseConfigured || !supabase) return null;
   const { data: session } = await supabase
     .from("sizing_sessions")
     .select("*, measurements(*)")

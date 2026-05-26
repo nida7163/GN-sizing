@@ -12,6 +12,7 @@ export async function analyzeNailPhoto(
   file: File,
   referenceObject: string,
 ): Promise<NailAnalysis> {
+  if (!supabase) throw new Error("Supabase not configured");
   const imageBase64 = await resizeAndEncode(file);
   const { data, error } = await supabase.functions.invoke("analyze-nail", {
     body: { imageBase64, mimeType: "image/jpeg", referenceObject },
