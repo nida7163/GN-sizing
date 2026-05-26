@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
     const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY") });
 
     const message = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-sonnet-4-6",
       max_tokens: 256,
       messages: [{
         role: "user",
@@ -27,14 +27,17 @@ Deno.serve(async (req) => {
           },
           {
             type: "text",
-            text: `Analyze this close-up photo of a human finger with a ${referenceObject} placed next to it on a flat surface, photographed from above.
+            text: `You are measuring a fingernail width from a top-down photo. The photo shows a single finger lying flat with a ${referenceObject} placed beside it as a size reference.
 
-Find two things and express their positions as fractions of image dimensions (0.0 = left/top edge, 1.0 = right/bottom edge):
+Express all positions as fractions of the TOTAL IMAGE WIDTH or HEIGHT (0.0 = left/top edge, 1.0 = right/bottom edge). Be as precise as possible.
 
-1. THE ${referenceObject.toUpperCase()}: its leftmost and rightmost visible outer edges
-2. THE FINGERNAIL: left and right edges at the widest visible point of the nail bed, plus the vertical center (y) of that measurement line
+Locate these two things:
 
-Return ONLY this JSON (no explanation, no markdown):
+1. THE ${referenceObject.toUpperCase()} — find its leftmost outer edge (ref_left) and rightmost outer edge (ref_right) as fractions of image width.
+
+2. THE FINGERNAIL — find the left edge (nail_left) and right edge (nail_right) of the nail bed at its WIDEST visible point, as fractions of image width. Also give the vertical center of that measurement line as a fraction of image height (nail_y).
+
+Return ONLY valid JSON, no explanation:
 {"ref_left":0.00,"ref_right":0.00,"nail_left":0.00,"nail_right":0.00,"nail_y":0.50}`,
           },
         ],
