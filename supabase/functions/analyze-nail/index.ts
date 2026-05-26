@@ -40,11 +40,14 @@ Find the exact physical edges of the ${referenceObject} itself (not the image bo
 - ref_right = x-fraction where the ${referenceObject}'s RIGHT physical edge is
 - ref_y     = y-fraction of the vertical CENTER of the ${referenceObject}
 
-STEP 3: Locate the FINGERNAIL PLATE (the smooth pink/white nail — NOT the surrounding skin or finger flesh).
-Find the widest horizontal span of the nail plate near its base (where the cuticle is), where the nail is flattest.
-- nail_left  = x-fraction of the LEFT edge of the nail plate at its widest point
-- nail_right = x-fraction of the RIGHT edge of the nail plate at that same point
-- nail_y     = y-fraction of the vertical center of that measurement line
+STEP 3: Locate the LEFT and RIGHT SIDE EDGES of the fingernail plate.
+The nail plate is a hard, smooth oval at the fingertip. It often has a shiny white highlight in the CENTER — DO NOT use this highlight as a reference point.
+Instead, find the SIDE BOUNDARIES: where the hard nail surface ends and the soft skin begins on each side of the finger.
+- nail_left  = x-fraction of the LEFT SIDE where nail plate meets skin (left boundary of the nail plate)
+- nail_right = x-fraction of the RIGHT SIDE where nail plate meets skin (right boundary of the nail plate)
+- nail_y     = y-fraction of the widest horizontal cross-section (near the cuticle/base of the nail)
+
+Width sanity check: nail_right - nail_left should be about 15–23% of (ref_right - ref_left) for a thumb, or 10–18% for index/middle/ring/pinky. If your value is outside this range, look again.
 
 SANITY CHECK before finalizing:
 - ref_left must be < ref_right (and ref_left should be well above 0.05 unless card truly touches left border)
