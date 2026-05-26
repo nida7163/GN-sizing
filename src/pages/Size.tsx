@@ -618,15 +618,16 @@ function MeasureStep({
       // Convert 0-1 fractions → pixel coordinates using natural image dimensions
       const img = new Image();
       await new Promise<void>(res => { img.onload = () => res(); img.src = url; });
-      const W = img.naturalWidth;
-      const H = img.naturalHeight;
-      const y = analysis.nail_y * H;
+      const W    = img.naturalWidth;
+      const H    = img.naturalHeight;
+      const refY  = (analysis.ref_y  ?? analysis.nail_y) * H;
+      const nailY = analysis.nail_y * H;
 
       setAiResult({
-        refLeft:   { x: analysis.ref_left   * W, y },
-        refRight:  { x: analysis.ref_right  * W, y },
-        nailLeft:  { x: analysis.nail_left  * W, y },
-        nailRight: { x: analysis.nail_right * W, y },
+        refLeft:   { x: analysis.ref_left   * W, y: refY  },
+        refRight:  { x: analysis.ref_right  * W, y: refY  },
+        nailLeft:  { x: analysis.nail_left  * W, y: nailY },
+        nailRight: { x: analysis.nail_right * W, y: nailY },
       });
       setPhase("review");
     } catch (err) {

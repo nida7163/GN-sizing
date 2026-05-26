@@ -36,9 +36,10 @@ CRITICAL CONTEXT:
 
 STEP 1: Describe what you see in 1–2 sentences. Where is the ${referenceObject} relative to the finger? (e.g., "card is on the left, finger on the right")
 
-STEP 2: Locate the ${referenceObject.toUpperCase()}. Carefully study its leftmost and rightmost outer edges. Give exact x-coordinate fractions of the total image width.
+STEP 2: Locate the ${referenceObject.toUpperCase()}. Carefully study its edges.
 - ref_left  = x-fraction of the LEFTMOST visible edge of the ${referenceObject}
 - ref_right = x-fraction of the RIGHTMOST visible edge of the ${referenceObject}
+- ref_y     = y-fraction of the VERTICAL CENTER of the ${referenceObject}
 
 STEP 3: Locate the FINGERNAIL (the pink/white nail plate, NOT the surrounding finger flesh). Find its widest point near the base of the nail (cuticle area), where it appears flattest from above.
 - nail_left  = x-fraction of the LEFT edge of the nail PLATE at its widest visible point
@@ -48,11 +49,11 @@ STEP 3: Locate the FINGERNAIL (the pink/white nail plate, NOT the surrounding fi
 SANITY CHECK:
 - ref_left  must be < ref_right
 - nail_left must be < nail_right
-- The reference object range [ref_left, ref_right] and nail range [nail_left, nail_right] should NOT significantly overlap — they're in different parts of the image.
+- The ${referenceObject} and the nail are in DIFFERENT locations in the image — either side by side (different x positions) OR one above the other (different y positions). They should NOT be at the same location.
 - A typical fingernail is roughly 30–70% of a credit card's width, or 50–90% of a quarter's width.
 
 After your reasoning, output the final JSON on a SINGLE line at the very end, in this exact format:
-FINAL: {"ref_left":0.000,"ref_right":0.000,"nail_left":0.000,"nail_right":0.000,"nail_y":0.500}`,
+FINAL: {"ref_left":0.000,"ref_right":0.000,"ref_y":0.300,"nail_left":0.000,"nail_right":0.000,"nail_y":0.500}`,
           },
         ],
       }],
@@ -69,7 +70,7 @@ FINAL: {"ref_left":0.000,"ref_right":0.000,"nail_left":0.000,"nail_right":0.000,
     const coords = JSON.parse(jsonStr);
 
     // Validate all required keys exist and are numbers
-    const keys = ["ref_left", "ref_right", "nail_left", "nail_right", "nail_y"];
+    const keys = ["ref_left", "ref_right", "ref_y", "nail_left", "nail_right", "nail_y"];
     for (const k of keys) {
       if (typeof coords[k] !== "number") throw new Error(`Missing field: ${k}`);
       if (coords[k] < 0 || coords[k] > 1)  throw new Error(`Out of range: ${k}=${coords[k]}`);
@@ -84,12 +85,13 @@ FINAL: {"ref_left":0.000,"ref_right":0.000,"nail_left":0.000,"nail_right":0.000,
     if (refWidth  < 0.02) throw new Error("Reference width too small (likely misdetection)");
     if (nailWidth < 0.01) throw new Error("Nail width too small (likely misdetection)");
 
-    // Check for overlap: if the nail range is entirely inside the ref range
-    // or vice versa, that's a sign the model confused them.
-    const overlap = Math.max(0, Math.min(coords.ref_right, coords.nail_right) - Math.max(coords.ref_left, coords.nail_left));
+    // Objects must be in different locations: either separated horizontally (x) or vertically (y).
+    // A vertical layout (card above/below finger) has x overlap but large y separation — that's OK.
+    const xOverlap = Math.max(0, Math.min(coords.ref_right, coords.nail_right) - Math.max(coords.ref_left, coords.nail_left));
+    const yGap     = Math.abs(coords.ref_y - coords.nail_y);
     const smallerWidth = Math.min(refWidth, nailWidth);
-    if (overlap > smallerWidth * 0.8) {
-      throw new Error(`Reference and nail overlap too much (likely AI confusion): overlap=${overlap.toFixed(3)}`);
+    if (xOverlap > smallerWidth * 0.8 && yGap < 0.15) {
+      throw new Error(`Reference and nail appear to be at the same location (likely AI confusion): xOverlap=${xOverlap.toFixed(3)}, yGap=${yGap.toFixed(3)}`);
     }
 
     return new Response(JSON.stringify(coords), {
