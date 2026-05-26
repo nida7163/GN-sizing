@@ -37,9 +37,10 @@ function launchDemo(navigate: ReturnType<typeof useNavigate>) {
 }
 
 const REF_OBJECTS = [
-  { label: "Penny / Dime", mm: 19 },
-  { label: "Quarter",      mm: 24 },
-  { label: "Credit card",  mm: 54 },
+  { label: "Penny / Dime",      mm: 19 },
+  { label: "Quarter",           mm: 24 },
+  { label: "Card (tall)",       mm: 54 },
+  { label: "Card (wide)",       mm: 86 },
 ] as const;
 
 // ── Nail shape SVG ────────────────────────────────────────────────────────────
