@@ -919,80 +919,81 @@ export default function Size() {
   const progressStep = state.step < 3 ? state.step : 2 + state.currentFinger + 1;
 
   return (
-    <div className="min-h-screen grippy-surface flex flex-col">
-      {state.step > 0 && (
-        <div className="flex items-center justify-between px-6 pt-safe pb-4 sticky top-0 z-10 bg-grippy-cream/80 backdrop-blur-sm">
-          <button
-            onClick={goBack}
-            className="flex items-center gap-1.5 text-grippy-black/60 font-unbounded text-xs font-semibold active:text-grippy-black transition-colors"
-          >
-            <ArrowLeft size={16} />
-            Back
-          </button>
-          <span className="font-unbounded text-xs font-black text-grippy-cobalt tracking-tight">
-            GRIPPY FIT
-          </span>
-          {/* Route back to landing where user can confirm restart — avoids accidental loss */}
-          <button
-            onClick={() => setStep(0)}
-            className="font-mono text-[10px] text-grippy-black/35 active:text-grippy-black/60 transition-colors"
-          >
-            Start over
-          </button>
-        </div>
-      )}
+    <div className="min-h-screen grippy-surface">
+      <div className="max-w-md mx-auto min-h-screen flex flex-col">
+        {state.step > 0 && (
+          <div className="flex items-center justify-between px-6 pt-safe pb-4 sticky top-0 z-10 bg-grippy-cream/80 backdrop-blur-sm">
+            <button
+              onClick={goBack}
+              className="flex items-center gap-1.5 text-grippy-black/60 font-unbounded text-xs font-semibold active:text-grippy-black transition-colors"
+            >
+              <ArrowLeft size={16} />
+              Back
+            </button>
+            <span className="font-unbounded text-xs font-black text-grippy-cobalt tracking-tight">
+              GRIPPY FIT
+            </span>
+            <button
+              onClick={() => setStep(0)}
+              className="font-mono text-[10px] text-grippy-black/35 active:text-grippy-black/60 transition-colors"
+            >
+              Start over
+            </button>
+          </div>
+        )}
 
-      {state.step > 0 && state.step < 6 && (
-        <div className="px-0 pt-2 pb-4">
-          <ProgressBar current={progressStep} total={PROGRESS_TOTAL} />
-        </div>
-      )}
+        {state.step > 0 && state.step < 6 && (
+          <div className="px-0 pt-2 pb-4">
+            <ProgressBar current={progressStep} total={PROGRESS_TOTAL} />
+          </div>
+        )}
 
-      <div className="flex-1 pb-safe">
-        <AnimatePresence mode="wait">
-          {state.step === 0 && (
-            <PageContainer key="landing" stepKey="landing">
-              <LandingStep
-                onStart={() => setStep(1)}
-                isGiftMode={isGiftMode}
-                hasSavedProgress={hasSavedProgress}
-                resumeLabel={resumeLabel}
-                onContinue={resume}
-                onStartOver={reset}
-                onDemo={() => launchDemo(navigate)}
-              />
-            </PageContainer>
-          )}
-          {state.step === 1 && (
-            <PageContainer key="hand" stepKey="hand">
-              <HandStep onSelect={setHand} />
-            </PageContainer>
-          )}
-          {state.step === 2 && (
-            <PageContainer key="shape" stepKey="shape">
-              <ShapeStep onSelect={setShape} />
-            </PageContainer>
-          )}
-          {state.step === 3 && (
-            <PageContainer key={`finger-${state.currentFinger}`} stepKey={`finger-${state.currentFinger}`}>
-              <MeasureStep
-                key={`measure-${state.currentFinger}`}
-                currentFinger={state.currentFinger}
-                fingerImages={state.fingerImages}
-                fingerCalibrations={state.fingerCalibrations}
-                measurementPoints={state.measurementPoints}
-                measurements={state.measurements}
-                shape={state.shape}
-                refIdx={refIdx}
-                onRefIdxChange={setRefIdx}
-                onSetFingerImage={setFingerImage}
-                onCalibrate={setFingerCalibration}
-                onMeasure={recordMeasurement}
-                onUndo={undoMeasurement}
-              />
-            </PageContainer>
-          )}
-        </AnimatePresence>
+        <div className="flex-1 pb-safe">
+          <AnimatePresence mode="wait">
+            {state.step === 0 && (
+              <PageContainer key="landing" stepKey="landing">
+                <LandingStep
+                  onStart={() => setStep(1)}
+                  isGiftMode={isGiftMode}
+                  hasSavedProgress={hasSavedProgress}
+                  resumeLabel={resumeLabel}
+                  onContinue={resume}
+                  onStartOver={reset}
+                  onDemo={() => launchDemo(navigate)}
+                />
+              </PageContainer>
+            )}
+            {state.step === 1 && (
+              <PageContainer key="hand" stepKey="hand">
+                <HandStep onSelect={setHand} />
+              </PageContainer>
+            )}
+            {state.step === 2 && (
+              <PageContainer key="shape" stepKey="shape">
+                <ShapeStep onSelect={setShape} />
+              </PageContainer>
+            )}
+            {state.step === 3 && (
+              <PageContainer key={`finger-${state.currentFinger}`} stepKey={`finger-${state.currentFinger}`}>
+                <MeasureStep
+                  key={`measure-${state.currentFinger}`}
+                  currentFinger={state.currentFinger}
+                  fingerImages={state.fingerImages}
+                  fingerCalibrations={state.fingerCalibrations}
+                  measurementPoints={state.measurementPoints}
+                  measurements={state.measurements}
+                  shape={state.shape}
+                  refIdx={refIdx}
+                  onRefIdxChange={setRefIdx}
+                  onSetFingerImage={setFingerImage}
+                  onCalibrate={setFingerCalibration}
+                  onMeasure={recordMeasurement}
+                  onUndo={undoMeasurement}
+                />
+              </PageContainer>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );
