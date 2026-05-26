@@ -37,10 +37,9 @@ function launchDemo(navigate: ReturnType<typeof useNavigate>) {
 }
 
 const REF_OBJECTS = [
-  { label: "Penny / Dime",      mm: 19 },
-  { label: "Quarter",           mm: 24 },
-  { label: "Card (tall)",       mm: 54 },
-  { label: "Card (wide)",       mm: 86 },
+  { label: "Penny / Dime", mm: 19 },
+  { label: "Quarter",      mm: 24 },
+  { label: "Credit card",  mm: 86 },
 ] as const;
 
 // ── Nail shape SVG ────────────────────────────────────────────────────────────
@@ -662,7 +661,7 @@ function MeasureStep({
           <ul className="space-y-2">
             {[
               `Rest your ${label.toLowerCase()} flat on a table, nail facing up`,
-              `Place the ${REF_OBJECTS[refIdx].label.toLowerCase()} flat on the same table right beside your nail — not under or over it`,
+              `Place the ${REF_OBJECTS[refIdx].label.toLowerCase()} flat beside your nail — horizontally (landscape) if using a card`,
               "Hold your phone directly above, pointing straight down",
               "Get close so the nail fills most of the frame",
             ].map(tip => (
