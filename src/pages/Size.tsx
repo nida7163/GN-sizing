@@ -338,8 +338,214 @@ function ShapeStep({ onSelect }: { onSelect: (shape: NailShape) => void }) {
   );
 }
 
+// ── AI review canvas: draggable ref + nail markers overlaid on photo ─────────
+type MarkerKey = "refLeft" | "refRight" | "nailLeft" | "nailRight";
+
+function AIReviewCanvas({
+  imageUrl,
+  result,
+  onChange,
+}: {
+  imageUrl: string;
+  result: AIResult;
+  onChange: (next: AIResult) => void;
+}) {
+  const canvasRef    = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const imageRef     = useRef<HTMLImageElement | null>(null);
+  const [draggingKey, setDraggingKey] = useState<MarkerKey | null>(null);
+  const draggingKeyRef = useRef<MarkerKey | null>(null);
+  draggingKeyRef.current = draggingKey;
+
+  const resultRef = useRef(result);
+  resultRef.current = result;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const draw = () => {
+    const canvas = canvasRef.current;
+    const img    = imageRef.current;
+    if (!canvas || !img) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    const scaleX = canvas.width  / img.naturalWidth;
+    const scaleY = canvas.height / img.naturalHeight;
+    const scale  = (p: Point) => ({ x: p.x * scaleX, y: p.y * scaleY });
+    const r      = resultRef.current;
+    const active = draggingKeyRef.current;
+
+    const drawPair = (l: Point, rPt: Point, color: string, label: string, lKey: MarkerKey, rKey: MarkerKey) => {
+      const sl = scale(l);
+      const sr = scale(rPt);
+      const drawMarker = (p: { x: number; y: number }, isActive: boolean) => {
+        const radius = isActive ? 16 : 12;
+        ctx.beginPath(); ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.globalAlpha = isActive ? 0.5 : 0.25; ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = color; ctx.fill();
+        ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2; ctx.stroke();
+      };
+      ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sr.x, sr.y);
+      ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+      ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+      drawMarker(sl, active === lKey);
+      drawMarker(sr, active === rKey);
+      ctx.font = "bold 12px 'DM Mono', monospace";
+      ctx.fillStyle = color; ctx.textAlign = "center";
+      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 3;
+      const tx = (sl.x + sr.x) / 2;
+      const ty = (sl.y + sr.y) / 2 - 14;
+      ctx.strokeText(label, tx, ty);
+      ctx.fillText(label, tx, ty);
+    };
+
+    drawPair(r.refLeft,  r.refRight,  "#0066FF", "reference", "refLeft",  "refRight");
+    drawPair(r.nailLeft, r.nailRight, "#0D0D0D", "nail",      "nailLeft", "nailRight");
+  };
+
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => {
+      imageRef.current = img;
+      const canvas    = canvasRef.current;
+      const container = containerRef.current;
+      if (!canvas || !container) return;
+      const maxW    = container.clientWidth;
+      canvas.width  = maxW;
+      canvas.height = maxW * (img.naturalHeight / img.naturalWidth);
+      draw();
+    };
+    img.src = imageUrl;
+  }, [imageUrl]);
+
+  useEffect(() => { draw(); }, [result, draggingKey]);
+
+  const clientToImage = (clientX: number, clientY: number): Point => {
+    const canvas = canvasRef.current!;
+    const img    = imageRef.current!;
+    const rect   = canvas.getBoundingClientRect();
+    const cx     = (clientX - rect.left) * (canvas.width  / rect.width);
+    const cy     = (clientY - rect.top)  * (canvas.height / rect.height);
+    return {
+      x: cx * (img.naturalWidth  / canvas.width),
+      y: cy * (img.naturalHeight / canvas.height),
+    };
+  };
+
+  const findClosestMarker = (clientX: number, clientY: number): MarkerKey | null => {
+    const canvas = canvasRef.current;
+    const img    = imageRef.current;
+    if (!canvas || !img) return null;
+    const rect   = canvas.getBoundingClientRect();
+    const scaleX = canvas.width  / img.naturalWidth;
+    const scaleY = canvas.height / img.naturalHeight;
+    const cx     = (clientX - rect.left) * (canvas.width  / rect.width);
+    const cy     = (clientY - rect.top)  * (canvas.height / rect.height);
+    const r      = resultRef.current;
+    const candidates: { key: MarkerKey; p: Point }[] = [
+      { key: "refLeft",   p: r.refLeft   },
+      { key: "refRight",  p: r.refRight  },
+      { key: "nailLeft",  p: r.nailLeft  },
+      { key: "nailRight", p: r.nailRight },
+    ];
+    let best: { key: MarkerKey; dist: number } | null = null;
+    for (const { key, p } of candidates) {
+      const sx = p.x * scaleX;
+      const sy = p.y * scaleY;
+      const d  = Math.hypot(sx - cx, sy - cy);
+      if (best === null || d < best.dist) best = { key, dist: d };
+    }
+    // Only grab if within 40px of a marker
+    return best && best.dist < 40 ? best.key : null;
+  };
+
+  // Native touch listeners so preventDefault works on iOS
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const t   = e.touches[0];
+      const key = findClosestMarker(t.clientX, t.clientY);
+      if (key) {
+        e.preventDefault();
+        draggingKeyRef.current = key;
+        setDraggingKey(key);
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      const key = draggingKeyRef.current;
+      if (!key || e.touches.length !== 1) return;
+      e.preventDefault();
+      const t  = e.touches[0];
+      const pt = clientToImage(t.clientX, t.clientY);
+      onChangeRef.current({ ...resultRef.current, [key]: pt });
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (draggingKeyRef.current) {
+        e.preventDefault();
+        draggingKeyRef.current = null;
+        setDraggingKey(null);
+      }
+    };
+
+    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    canvas.addEventListener("touchmove",  onTouchMove,  { passive: false });
+    canvas.addEventListener("touchend",   onTouchEnd,   { passive: false });
+    return () => {
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchmove",  onTouchMove);
+      canvas.removeEventListener("touchend",   onTouchEnd);
+    };
+  }, []);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const key = findClosestMarker(e.clientX, e.clientY);
+    if (key) { draggingKeyRef.current = key; setDraggingKey(key); }
+  };
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const key = draggingKeyRef.current;
+    if (!key) return;
+    const pt = clientToImage(e.clientX, e.clientY);
+    onChangeRef.current({ ...resultRef.current, [key]: pt });
+  };
+  const handleMouseUp = () => {
+    if (draggingKeyRef.current) { draggingKeyRef.current = null; setDraggingKey(null); }
+  };
+
+  return (
+    <div ref={containerRef} className="w-full rounded-2xl overflow-hidden bg-grippy-black shadow-xl">
+      <canvas
+        ref={canvasRef}
+        className="w-full touch-none select-none"
+        style={{ cursor: draggingKey ? "grabbing" : "grab" }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      />
+    </div>
+  );
+}
+
 // ── Step 3: Per-finger photo → calibrate → measure ────────────────────────────
-type FingerPhase = "photo" | "analyzing" | "calibrate" | "measure";
+type FingerPhase = "photo" | "analyzing" | "review" | "calibrate" | "measure";
+
+interface AIResult {
+  refLeft:   Point;
+  refRight:  Point;
+  nailLeft:  Point;
+  nailRight: Point;
+}
 
 const SIZE_ORDER: SizeKey[] = ["XS", "S", "M", "L"];
 
@@ -388,6 +594,7 @@ function MeasureStep({
   const [calCanvasKey, setCalCanvasKey] = useState(0);
   const [measureWarn, setMeasureWarn] = useState<{ mm: number; dist: number; left: Point; right: Point } | null>(null);
   const [calWarn,     setCalWarn]     = useState<{ dist: number; left: Point; right: Point } | null>(null);
+  const [aiResult,    setAiResult]    = useState<AIResult | null>(null);
 
   const handlePhoto = async (file: File) => {
     const url = URL.createObjectURL(file);
@@ -415,19 +622,30 @@ function MeasureStep({
       const H = img.naturalHeight;
       const y = analysis.nail_y * H;
 
-      const refLeft  = { x: analysis.ref_left  * W, y };
-      const refRight = { x: analysis.ref_right * W, y };
-      const nailLeft  = { x: analysis.nail_left  * W, y };
-      const nailRight = { x: analysis.nail_right * W, y };
-
-      onCalibrate(finger, refLeft, refRight, REF_OBJECTS[refIdx].mm);
-      const distPx = Math.abs(nailRight.x - nailLeft.x);
-      onMeasure(currentFinger, distPx, nailLeft, nailRight);
-      // onMeasure advances currentFinger → component remounts for next finger
+      setAiResult({
+        refLeft:   { x: analysis.ref_left   * W, y },
+        refRight:  { x: analysis.ref_right  * W, y },
+        nailLeft:  { x: analysis.nail_left  * W, y },
+        nailRight: { x: analysis.nail_right * W, y },
+      });
+      setPhase("review");
     } catch (err) {
       console.warn("[Grippy] AI detection failed, falling back to manual:", err);
       setPhase("calibrate");
     }
+  };
+
+  const handleAcceptAI = () => {
+    if (!aiResult) return;
+    onCalibrate(finger, aiResult.refLeft, aiResult.refRight, REF_OBJECTS[refIdx].mm);
+    const distPx = Math.abs(aiResult.nailRight.x - aiResult.nailLeft.x);
+    onMeasure(currentFinger, distPx, aiResult.nailLeft, aiResult.nailRight);
+    setAiResult(null);
+  };
+
+  const handleRejectAI = () => {
+    setAiResult(null);
+    setPhase("calibrate");
   };
 
   const commitCalibrate = (left: Point, right: Point) => {
@@ -746,6 +964,74 @@ function MeasureStep({
     );
   }
 
+  // ── Phase: review AI detection ───────────────────────────────────────────
+  if (phase === "review" && aiResult && photoUrl) {
+    const refPx       = Math.abs(aiResult.refRight.x  - aiResult.refLeft.x);
+    const nailPx      = Math.abs(aiResult.nailRight.x - aiResult.nailLeft.x);
+    const pixelsPerMm = refPx / REF_OBJECTS[refIdx].mm;
+    const nailMm      = nailPx / pixelsPerMm;
+    const looksReasonable = nailMm >= 5 && nailMm <= 25;
+
+    return (
+      <div className="flex flex-col gap-6 px-5 pt-8">
+        <div className="space-y-1">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-grippy-black/40">
+            Finger {currentFinger + 1} of 5
+          </p>
+          <h2 className="font-unbounded text-xl font-bold text-grippy-black">
+            Does this look right?
+          </h2>
+          <p className="font-mono text-sm text-grippy-black/50 pt-1">
+            Blue = {REF_OBJECTS[refIdx].label.toLowerCase()} • Black = nail edges
+          </p>
+        </div>
+
+        <AIReviewCanvas
+          imageUrl={photoUrl}
+          result={aiResult}
+          onChange={setAiResult}
+        />
+
+        <p className="font-mono text-[11px] text-grippy-black/50 text-center -mt-2">
+          Drag any dot to adjust — line up with the actual edges
+        </p>
+
+        <div className="bg-grippy-black/[0.04] rounded-2xl px-4 py-3 flex items-center justify-between">
+          <span className="font-mono text-xs text-grippy-black/60">Current estimate:</span>
+          <span className="font-unbounded text-lg font-bold text-grippy-black tabular-nums">
+            {nailMm.toFixed(1)} mm
+          </span>
+        </div>
+
+        {!looksReasonable && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+            <p className="font-mono text-xs text-amber-800 leading-relaxed">
+              That measurement looks off (typical nails are 8–20 mm). Tap manually for a better result.
+            </p>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-2">
+          <GrippyButton size="lg" fullWidth onClick={handleAcceptAI}>
+            Looks correct
+          </GrippyButton>
+          <button
+            onClick={handleRejectAI}
+            className="w-full py-3 font-mono text-xs text-grippy-black/50 active:text-grippy-black underline underline-offset-2 transition-colors"
+          >
+            Tap manually instead
+          </button>
+          <button
+            onClick={handleRetakePhoto}
+            className="w-full py-2 font-mono text-[11px] text-grippy-black/35 active:text-grippy-black/60 transition-colors"
+          >
+            Retake photo
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ── Phase: calibrate ──────────────────────────────────────────────────────
   if (phase === "calibrate") {
     return (
@@ -937,7 +1223,7 @@ export default function Size() {
     restoreForRetake,
   } = useSizing();
 
-  const [refIdx, setRefIdx] = useState(1); // default: Quarter; lifted so it persists across fingers
+  const [refIdx, setRefIdx] = useState(2); // default: Credit card; lifted so it persists across fingers
 
   const hasSavedProgress = state.hand !== null || Object.keys(state.measurements).length > 0;
   const resumeLabel      = getResumeLabel(state);
