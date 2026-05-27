@@ -54,18 +54,6 @@ src/
     └── client.ts             Supabase client (no-ops when env vars absent)
 ```
 
-## Design System
-
-| Token        | Value       | Tailwind class       |
-|--------------|-------------|----------------------|
-| Cobalt       | `#1A3FCC`   | `text-grippy-cobalt` |
-| Black        | `#0D0D0D`   | `text-grippy-black`  |
-| Cream        | `#F2EDE4`   | `bg-grippy-cream`    |
-| Font display | Unbounded   | `font-unbounded`     |
-| Font mono    | DM Mono     | `font-mono`          |
-
-Background utility: `grippy-surface` (cream bg + black text). Safe area insets: `pt-safe` / `pb-safe`.
-
 ## Size Chart
 
 | Size | Thumb | Index | Middle | Ring | Pinky |
@@ -84,7 +72,6 @@ User taps the left and right edge of a reference object placed beside the nail:
 
 | Object       | Width |
 |--------------|-------|
-| Penny / Dime | 19 mm |
 | Quarter      | 24 mm |
 | Credit card  | 86 mm |
 
