@@ -7,19 +7,19 @@ export const shapeLabels: Record<NailShape, string> = {
 };
 
 // Arc/width (mm) per finger [thumb, index, middle, ring, pinky] from official Grippy size chart.
-// Both shapes share identical arc/width values; shape affects nail length, not width.
+// Each size steps ±1 mm from M. Oval and round shapes carry different nail-plate widths.
 export const sizeCharts: Record<NailShape, Record<SizeKey, readonly number[]>> = {
   "short-round": {
-    XS: [14, 10, 11, 10, 8],
-    S:  [15, 11, 12, 11, 9],
-    M:  [16, 12, 13, 12, 10],
-    L:  [17, 13, 14, 13, 11],
+    XS: [15, 12, 12.5, 12, 10],
+    S:  [16, 13, 13.5, 13, 11],
+    M:  [17, 14, 14.5, 14, 12],
+    L:  [18, 15, 15.5, 15, 13],
   },
   "short-oval": {
-    XS: [14, 10, 11, 10, 8],
-    S:  [15, 11, 12, 11, 9],
-    M:  [16, 12, 13, 12, 10],
-    L:  [17, 13, 14, 13, 11],
+    XS: [18, 16, 16.5, 16, 14],
+    S:  [19, 17, 17.5, 17, 15],
+    M:  [20, 18, 18.5, 18, 16],
+    L:  [21, 19, 19.5, 19, 17],
   },
 };
 
