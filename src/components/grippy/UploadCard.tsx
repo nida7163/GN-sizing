@@ -49,20 +49,20 @@ export function UploadCard({ onFile, preview, className }: UploadCardProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
     >
-      <div className="grid grid-cols-2 gap-3">
+      <div className="flex flex-col gap-2">
         <button
           onClick={() => cameraRef.current?.click()}
-          className="flex flex-col items-center gap-3 bg-grippy-black text-grippy-cream rounded-3xl p-8 active:scale-95 transition-transform"
+          className="flex items-center justify-center gap-3 bg-grippy-black text-grippy-cream rounded-3xl py-5 active:scale-95 transition-transform w-full"
         >
-          <Camera size={28} />
-          <span className="font-unbounded text-xs font-semibold">Camera</span>
+          <Camera size={22} />
+          <span className="font-unbounded text-sm font-semibold">Take Photo</span>
         </button>
         <button
           onClick={() => fileRef.current?.click()}
-          className="flex flex-col items-center gap-3 bg-grippy-cream text-grippy-black border border-grippy-black/10 rounded-3xl p-8 active:scale-95 transition-transform"
+          className="flex items-center justify-center gap-2 bg-grippy-cream text-grippy-black/40 border border-grippy-black/10 rounded-2xl py-3 active:scale-95 transition-transform w-full"
         >
-          <ImagePlus size={28} />
-          <span className="font-unbounded text-xs font-semibold">Gallery</span>
+          <ImagePlus size={15} />
+          <span className="font-mono text-[11px]">Choose from gallery</span>
         </button>
       </div>
 

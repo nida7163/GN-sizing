@@ -37,9 +37,8 @@ function launchDemo(navigate: ReturnType<typeof useNavigate>) {
 }
 
 const REF_OBJECTS = [
-  { label: "Penny / Dime", mm: 19 },
-  { label: "Quarter",      mm: 24 },
-  { label: "Credit card",  mm: 86 },
+  { label: "Quarter",     mm: 24 },
+  { label: "Credit card", mm: 86 },
 ] as const;
 
 // ── Nail shape SVG ────────────────────────────────────────────────────────────
@@ -892,7 +891,7 @@ export default function Size() {
     restoreForRetake,
   } = useSizing();
 
-  const [refIdx, setRefIdx] = useState(2); // default: Credit card; lifted so it persists across fingers
+  const [refIdx, setRefIdx] = useState(1); // default: Credit card; lifted so it persists across fingers
 
   const hasSavedProgress = state.hand !== null || Object.keys(state.measurements).length > 0;
   const resumeLabel      = getResumeLabel(state);
